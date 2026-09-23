@@ -53,7 +53,7 @@ def resolve_coupon(code: str, *, user: AbstractBaseUser, cart: Cart) -> Coupon:
     if not coupon.is_active:
         raise CouponError("That code has been retired.")
     if coupon.is_expired():
-        raise CouponError("That code has expired.")
+        raise CouponError("Oops! That discount code is expired or has reached its usage limit.")
     if coupon.product_id and not any(
         line.product_id == coupon.product_id for line in cart.lines()
     ):

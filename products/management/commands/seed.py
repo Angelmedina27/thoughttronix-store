@@ -21,6 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from coupons.models import Coupon
 from orders.models import Cart, Order, OrderItem
 from products.models import Category, Product, Tag
 
@@ -496,6 +497,13 @@ SEED_ADDRESSES = [
 
 CARD_LAST4S = ["4242", "4111", "1881", "0005"]
 
+# Demo coupons: (code, percent_off, product slug or None, is_active).
+COUPONS = [
+    ("FALL26", 20, None, True),
+    ("SERAPHINE15", 15, "seraphine", True),
+    ("SUMMER25", 25, None, False),
+]
+
 
 class Command(BaseCommand):
     help = "Wipe and rebuild the demo world: catalog, tags, and demo accounts."
@@ -505,6 +513,7 @@ class Command(BaseCommand):
         self._wipe()
         tags = self._create_tags()
         self._create_catalog(tags)
+        self._create_coupons()
         self._create_users()
         self._create_customer_cart()
         self._create_orders()
@@ -514,6 +523,7 @@ class Command(BaseCommand):
                 f"Seeded {Category.objects.count()} categories, "
                 f"{Tag.objects.count()} tags, "
                 f"{Product.objects.count()} products, "
+                f"{Coupon.objects.count()} coupons, "
                 f"{get_user_model().objects.count()} users, "
                 f"{Order.objects.count()} orders, "
                 f"and a live cart for 'customer'."
@@ -524,6 +534,7 @@ class Command(BaseCommand):
         """Remove everything the seed owns; the rebuild starts from zero."""
         Order.objects.all().delete()
         Cart.objects.all().delete()
+        Coupon.objects.all().delete()
         Product.objects.all().delete()
         Tag.objects.all().delete()
         Category.objects.all().delete()
@@ -554,6 +565,17 @@ class Command(BaseCommand):
                     category=category,
                 )
                 product.tags.set(tags[tag_name] for tag_name in tag_names)
+
+    def _create_coupons(self):
+        for code, percent_off, product_slug, is_active in COUPONS:
+            Coupon.objects.create(
+                code=code,
+                percent_off=percent_off,
+                product=Product.objects.get(slug=product_slug)
+                if product_slug
+                else None,
+                is_active=is_active,
+            )
 
     def _create_users(self):
         User = get_user_model()

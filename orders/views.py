@@ -19,7 +19,24 @@ from products.models import Product
 
 from .forms import CheckoutForm, OrderStatusForm
 from .models import Cart, CartItem, Order
-from .services import place_order
+from .services import (
+    CouponError,
+    cart_coupon,
+    compute_discount,
+    place_order,
+    resolve_coupon,
+)
+
+
+def _cart_summary(cart):
+    """Coupon, discount, and post-discount total for a cart — display only."""
+    coupon = cart_coupon(cart)
+    discount = compute_discount(cart, coupon)
+    return {
+        "coupon": coupon,
+        "discount_amount": discount,
+        "display_total": cart.total() - discount,
+    }
 
 
 class CartView(LoginRequiredMixin, TemplateView):
@@ -29,8 +46,37 @@ class CartView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["cart"] = Cart.for_user(self.request.user)
+        cart = Cart.for_user(self.request.user)
+        context["cart"] = cart
+        context.update(_cart_summary(cart))
         return context
+
+
+class ApplyCouponView(LoginRequiredMixin, View):
+    """Attach a coupon code to the cart, or clear it (a blank code).
+
+    Validation runs through ``resolve_coupon`` so the rules never drift
+    from what ``place_order`` itself enforces; a bad code is a plain
+    message, never a crash.
+    """
+
+    def post(self, request):
+        cart = Cart.for_user(request.user)
+        code = request.POST.get("coupon_code", "").strip()
+        if not code:
+            cart.coupon_code = ""
+            cart.save(update_fields=["coupon_code"])
+            messages.info(request, "Coupon removed.")
+            return redirect("orders:cart")
+        try:
+            coupon = resolve_coupon(code, user=request.user, cart=cart)
+        except CouponError as exc:
+            messages.error(request, str(exc))
+            return redirect("orders:cart")
+        cart.coupon_code = coupon.code
+        cart.save(update_fields=["coupon_code"])
+        messages.success(request, f"{coupon.code} applied — {coupon.percent_off}% off.")
+        return redirect("orders:cart")
 
 
 class AddToCartView(LoginRequiredMixin, View):
@@ -60,11 +106,9 @@ class CartItemActionView(LoginRequiredMixin, View):
     def post(self, request, pk):
         item = get_object_or_404(CartItem, pk=pk, cart__user=request.user)
         self.act(item)
-        return render(
-            request,
-            "orders/partials/_cart_contents.html",
-            {"cart": item.cart, "oob_badge": True},
-        )
+        context = {"cart": item.cart, "oob_badge": True}
+        context.update(_cart_summary(item.cart))
+        return render(request, "orders/partials/_cart_contents.html", context)
 
     def act(self, item):
         raise NotImplementedError
@@ -88,10 +132,10 @@ class RemoveCartItemView(CartItemActionView):
 class CheckoutView(LoginRequiredMixin, FormView):
     """The single checkout page: validate the form, hand off to the service.
 
-    A cart that can't check out (empty, or holding a product that has
-    since become unavailable) is sent back to the cart page to be fixed —
-    ``place_order`` enforces the same rules transactionally as the
-    backstop.
+    A cart that can't check out (empty, holding a product that has since
+    become unavailable, or carrying a coupon that's since stopped working)
+    is sent back to the cart page to be fixed — ``place_order`` enforces
+    the same rules transactionally as the backstop.
     """
 
     template_name = "orders/checkout.html"
@@ -114,16 +158,31 @@ class CheckoutView(LoginRequiredMixin, FormView):
                 "Remove them from the cart to check out.",
             )
             return redirect("orders:cart")
+        if cart.coupon_code:
+            try:
+                resolve_coupon(cart.coupon_code, user=request.user, cart=cart)
+            except CouponError as exc:
+                cart.coupon_code = ""
+                cart.save(update_fields=["coupon_code"])
+                messages.warning(request, str(exc))
+                return redirect("orders:cart")
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["cart"] = Cart.for_user(self.request.user)
+        cart = Cart.for_user(self.request.user)
+        context["cart"] = cart
+        context.update(_cart_summary(cart))
         return context
 
     def form_valid(self, form):
         cart = Cart.for_user(self.request.user)
-        order = place_order(cart, self.request.user, form.cleaned_data)
+        order = place_order(
+            cart,
+            self.request.user,
+            form.cleaned_data,
+            coupon_code=cart.coupon_code or None,
+        )
         messages.success(self.request, f"Order {order.number} placed. Thank you!")
         return redirect(reverse("orders:confirmation", kwargs={"pk": order.pk}))
 

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # Local
     "accounts",
     "products",
+    "coupons",
     "orders",
     "dashboard",
 ]

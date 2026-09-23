@@ -53,10 +53,39 @@
     </table>
   </div>
 
-  <div class="mt-6 flex flex-wrap items-center justify-end gap-6">
-    <p class="text-xl font-semibold">
-      Total: <span class="text-primary">${{ cart.total|intcomma }}</span>
-    </p>
+  <div class="mt-6 flex flex-wrap items-end justify-between gap-6">
+    <div>
+      {% if coupon %}
+        <p class="flex items-center gap-2 text-sm">
+          <span class="badge badge-success badge-outline font-mono">{{ coupon.code }}</span>
+          <span class="opacity-70">{{ coupon.percent_off }}% off {{ coupon.scope_display|lower }}</span>
+          <form method="post" action="{% url 'orders:apply_coupon' %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="link link-hover opacity-70">Remove</button>
+          </form>
+        </p>
+      {% else %}
+        <form method="post" action="{% url 'orders:apply_coupon' %}" class="flex items-end gap-2">
+          {% csrf_token %}
+          <div>
+            <label class="label mb-1 text-sm" for="id_coupon_code">Coupon code</label>
+            <input type="text" id="id_coupon_code" name="coupon_code" class="input input-sm" />
+          </div>
+          <button type="submit" class="btn btn-sm">Apply</button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="text-right">
+      {% if discount_amount %}
+        <p class="text-sm opacity-70">Subtotal ${{ cart.total|intcomma }}</p>
+        <p class="text-sm text-success">− ${{ discount_amount|intcomma }}</p>
+      {% endif %}
+      <p class="text-xl font-semibold">
+        Total: <span class="text-primary">${{ display_total|intcomma }}</span>
+      </p>
+    </div>
+  </div>
+  <div class="mt-4 flex justify-end">
     <a href="{% url 'orders:checkout' %}" class="btn btn-primary">Checkout</a>
   </div>
 {% else %}

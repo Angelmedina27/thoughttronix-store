@@ -79,6 +79,10 @@
           <button type="submit" class="btn btn-primary">Update</button>
         </form>
         <div class="mt-4 text-right">
+          {% if order.discount_amount %}
+            <p class="text-sm opacity-70">Subtotal ${{ order.subtotal|intcomma }}</p>
+            <p class="text-sm text-success">{{ order.coupon_code }} − ${{ order.discount_amount|intcomma }}</p>
+          {% endif %}
           <p class="text-sm uppercase tracking-wide opacity-60">Order total</p>
           <p class="text-2xl font-bold text-primary">${{ order.total|intcomma }}</p>
         </div>

@@ -15,6 +15,7 @@ class Cart(models.Model):
         on_delete=models.CASCADE,
         related_name="cart",
     )
+    coupon_code = models.CharField(max_length=20, blank=True)
 
     def __str__(self):
         return f"Cart for {self.user.username}"
@@ -101,6 +102,10 @@ class Order(models.Model):
         max_length=10, choices=Status.choices, default=Status.PLACED
     )
     total = models.DecimalField(max_digits=10, decimal_places=2)
+    coupon_code = models.CharField(max_length=20, blank=True)
+    discount_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
     email = models.EmailField()
 
     shipping_name = models.CharField(max_length=100)
@@ -132,6 +137,11 @@ class Order(models.Model):
     def number(self):
         """The customer-facing order number, e.g. ``TT-2026-00042``."""
         return f"TT-{self.created_at.year}-{self.pk:05d}"
+
+    @property
+    def subtotal(self):
+        """The pre-discount total — ``total`` plus whatever the coupon knocked off."""
+        return self.total + self.discount_amount
 
 
 class OrderItem(models.Model):

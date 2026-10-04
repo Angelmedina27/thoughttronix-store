@@ -5,13 +5,34 @@ grows with the project; tests never invoke the seed command.
 """
 
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from coupons.models import Coupon
 from orders.models import Cart, CartItem
 from products.models import Category, Product, Tag
+
+
+@pytest.fixture(autouse=True)
+def media_root(settings, tmp_path):
+    """Keep test uploads out of the real ``media/`` directory."""
+    settings.MEDIA_ROOT = tmp_path
+
+
+def png_bytes():
+    """A real 1x1 PNG, built in memory."""
+    buffer = BytesIO()
+    Image.new("RGB", (1, 1)).save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def png_upload():
+    return SimpleUploadedFile("photo.png", png_bytes(), content_type="image/png")
 
 
 @pytest.fixture
@@ -46,6 +67,13 @@ def product(category):
         price=Decimal("349.99"),
         category=category,
     )
+
+
+@pytest.fixture
+def product_with_image(product, png_upload):
+    product.image = png_upload
+    product.save()
+    return product
 
 
 @pytest.fixture

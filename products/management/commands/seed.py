@@ -2,7 +2,9 @@
 
 Destructive and idempotent: every run wipes the catalog and the demo
 accounts, then rebuilds the identical demo world. Run it whenever the
-database should return to a known state.
+database should return to a known state. Uploaded product images are
+wiped too; products with a file in ``products/seed_images/<slug>.png``
+get it attached.
 
 Demo logins (documented in the README):
 
@@ -12,10 +14,14 @@ Demo logins (documented in the README):
 """
 
 import random
+import shutil
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -24,6 +30,10 @@ from django.utils.text import slugify
 from coupons.models import Coupon
 from orders.models import Cart, Order, OrderItem
 from products.models import Category, Product, Tag
+
+# Product photos, named by product slug. Products without one keep their
+# category placeholder.
+SEED_IMAGES_DIR = Path(__file__).resolve().parents[2] / "seed_images"
 
 TAGS = [
     "always listening",
@@ -538,6 +548,7 @@ class Command(BaseCommand):
         Product.objects.all().delete()
         Tag.objects.all().delete()
         Category.objects.all().delete()
+        shutil.rmtree(Path(settings.MEDIA_ROOT) / "products", ignore_errors=True)
 
         managed_usernames = [username for username, *_ in DEMO_USERS] + [
             username for username, *_ in BACKGROUND_CUSTOMERS
@@ -565,6 +576,13 @@ class Command(BaseCommand):
                     category=category,
                 )
                 product.tags.set(tags[tag_name] for tag_name in tag_names)
+                self._attach_seed_image(product)
+
+    def _attach_seed_image(self, product):
+        path = SEED_IMAGES_DIR / f"{product.slug}.png"
+        if path.exists():
+            with path.open("rb") as image:
+                product.image.save(path.name, File(image))
 
     def _create_coupons(self):
         for code, percent_off, product_slug, is_active in COUPONS:

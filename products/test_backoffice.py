@@ -4,7 +4,11 @@ from decimal import Decimal
 from http import HTTPStatus
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.templatetags.static import static
 from django.urls import reverse
+
+from conftest import png_bytes
 
 from .models import Category, Product, Tag
 
@@ -232,3 +236,91 @@ def test_manage_catalog_lists_categories_and_tags(client, staff_user, product, t
 
     assert product.category.name in page
     assert tag.name in page
+
+
+# --- Product images ----------------------------------------------------------
+
+
+def post_image(client, product, image, **overrides):
+    """Submit the edit form for ``product`` with ``image`` attached."""
+    data = product_data(product.category, name=product.name, slug=product.slug)
+    data.update(overrides)
+    if image is not None:
+        data["image"] = image
+    return client.post(
+        reverse("products:manage_product_update", kwargs={"pk": product.pk}), data
+    )
+
+
+def test_staff_can_upload_an_image(client, staff_user, product, png_upload):
+    client.force_login(staff_user)
+
+    response = post_image(client, product, png_upload)
+
+    assert response.status_code == HTTPStatus.FOUND
+    product.refresh_from_db()
+    assert product.image.name.startswith("products/photo")
+    assert product.display_image_url == product.image.url
+
+
+def test_wrong_file_type_is_rejected(client, staff_user, product):
+    client.force_login(staff_user)
+    upload = SimpleUploadedFile("notes.txt", b"not an image", content_type="text/plain")
+
+    response = post_image(client, product, upload)
+
+    assert response.status_code == HTTPStatus.OK
+    assert "Allowed extensions are: png, jpg, jpeg, webp." in response.content.decode()
+    product.refresh_from_db()
+    assert not product.image
+
+
+def test_fake_png_is_rejected(client, staff_user, product):
+    client.force_login(staff_user)
+    upload = SimpleUploadedFile("fake.png", b"not an image", content_type="image/png")
+
+    response = post_image(client, product, upload)
+
+    assert response.status_code == HTTPStatus.OK
+    assert "Upload a valid image" in response.content.decode()
+    product.refresh_from_db()
+    assert not product.image
+
+
+def test_oversized_image_is_rejected(client, staff_user, product):
+    client.force_login(staff_user)
+    # A valid PNG padded past 5 MB; Pillow ignores bytes after the image end.
+    oversized = png_bytes() + b"x" * (5 * 1024 * 1024)
+    upload = SimpleUploadedFile("huge.png", oversized, content_type="image/png")
+
+    response = post_image(client, product, upload)
+
+    assert response.status_code == HTTPStatus.OK
+    assert "Image must be 5 MB or smaller." in response.content.decode()
+    product.refresh_from_db()
+    assert not product.image
+
+
+def test_edit_page_shows_the_current_image(client, staff_user, product_with_image):
+    client.force_login(staff_user)
+
+    page = client.get(
+        reverse("products:manage_product_update", kwargs={"pk": product_with_image.pk})
+    ).content.decode()
+
+    assert 'enctype="multipart/form-data"' in page
+    assert f'<img src="{product_with_image.image.url}"' in page
+
+
+def test_clearing_the_image_restores_the_placeholder(
+    client, staff_user, product_with_image
+):
+    client.force_login(staff_user)
+
+    post_image(client, product_with_image, None, **{"image-clear": "on"})
+
+    product_with_image.refresh_from_db()
+    assert not product_with_image.image
+    assert product_with_image.display_image_url == static(
+        "images/placeholders/home-assistants.svg"
+    )

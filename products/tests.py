@@ -5,6 +5,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.html import escape
 
@@ -54,6 +55,17 @@ def test_product_get_absolute_url(product):
     assert product.get_absolute_url() == "/products/seraphine-home-hub/"
 
 
+def test_display_image_url_uses_the_upload(product_with_image):
+    assert product_with_image.display_image_url == product_with_image.image.url
+    assert product_with_image.display_image_url.startswith("/media/products/")
+
+
+def test_display_image_url_falls_back_to_the_placeholder(product):
+    assert product.display_image_url == static(
+        "images/placeholders/home-assistants.svg"
+    )
+
+
 def test_category_get_absolute_url(category):
     assert category.get_absolute_url() == "/categories/home-assistants/"
 
@@ -81,6 +93,20 @@ def test_detail_page(client, product):
     page = response.content.decode()
     assert product.name in page
     assert escape(product.description) in page
+
+
+def test_catalog_and_detail_show_the_uploaded_image(client, product_with_image):
+    url = product_with_image.image.url
+
+    assert url in client.get(reverse("products:catalog")).content.decode()
+    assert url in client.get(product_with_image.get_absolute_url()).content.decode()
+
+
+def test_catalog_and_detail_show_the_placeholder_without_an_image(client, product):
+    placeholder = product.display_image_url
+
+    assert placeholder in client.get(reverse("products:catalog")).content.decode()
+    assert placeholder in client.get(product.get_absolute_url()).content.decode()
 
 
 def test_detail_unknown_slug_404(client, db):

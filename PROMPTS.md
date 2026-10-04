@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-04 — Implement product images from the HANDOFF.md design
+
+### Prompts
+1. `@HANDOFF.md Implement this feature` — build the product-images design agreed in an earlier `/grill-me` interview and recorded in `HANDOFF.md`.
+2. Let's leave that file where it is just to be safe. (Answering whether to delete the unused `product-images/SyncRest GPT Text.png`.)
+3. Write the entry to PROMPTS.md now.
+
+### Summary
+- **Outcome:** Added `Product.image` (`ImageField`, `upload_to="products/"`, optional, png/jpg/jpeg/webp only) with Pillow (`uv add pillow`) and migration `0004_product_image`. `ProductForm` gained the field, a DaisyUI `file-input` class, and `clean_image` (5 MB limit, "Image must be 5 MB or smaller."). Set `MEDIA_ROOT`/`MEDIA_URL`, serve media in DEBUG via `static()` in `config/urls.py`, and gitignored `media/`. Added `Product.display_image_url` (the upload, or the category placeholder); the catalog cards (fixed 4:3, `object-cover object-top`) and the detail page use it. The back-office edit form got `enctype="multipart/form-data"` and a current-image thumbnail; Django's Clear checkbox brings back the placeholder. Moved 12 sample photos into `products/seed_images/<slug>.png`; `seed` wipes `media/products/` and attaches them, and reseeding twice left exactly 12 files. Added an autouse `MEDIA_ROOT = tmp_path` fixture, `png_upload`/`product_with_image` fixtures, and 10 tests. All 212 tests pass and ruff is clean. On the dev server, the catalog showed 12 photos and 22 placeholders, and the media URL served the PNG. Updated `CLAUDE.md`. Nothing committed.
+- **Deviations:** One change beyond the handoff. Probing showed a `.txt` upload never got the agreed allowed-formats message: text content hit Pillow's "Upload a valid image" error first, and image bytes renamed `.txt` hit Django's form validator, which lists ~70 Pillow formats. Added a small `ProductImageField` (via `Meta.field_classes`) that checks the extension before Pillow, sharing one `validate_image_extension` with the model. On prompt 2, the user chose to keep the leftover `SyncRest GPT Text.png` rather than delete it. The handoff asked for this log entry, but this file's rule says entries are added only when prompted, so the assistant waited for prompt 3.
+- **Sideways:** A scripted Python edit read files as cp1252, so two replacements containing an em dash silently didn't match. `makemigrations` then failed with `NameError: FileExtensionValidator`, and the two blocks were fixed by hand. Shell escaping put a literal null byte in the oversized-file test, which broke pytest collection. The first byte fix hit the same escaping problem, so the padding was changed to `b"x"`. `ruff format .` also re-wrapped one unrelated, already unformatted line in `orders/services.py`. `HANDOFF.md` said `product-images/` was untracked, but it was tracked, so the moves show as git deletions. The catalog's visual layout was checked over HTTP and the Tailwind build, not in a browser.
+
 ## 2026-09-23 — Add a marketing-managed discount coupon feature
 
 ### Prompts

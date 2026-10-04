@@ -1,9 +1,11 @@
+from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.templatetags.static import static
 from django.urls import reverse
 
 # Categories with a dedicated placeholder illustration; anything else
-# falls back to default.svg. No media handling in the core — placeholder
-# images are static files chosen by category.
+# falls back to default.svg. Products without an uploaded image show
+# their category's placeholder, a static file chosen by category.
 PLACEHOLDER_CATEGORIES = {
     "home-assistants",
     "neural-implants",
@@ -12,6 +14,9 @@ PLACEHOLDER_CATEGORIES = {
     "defense",
     "legacy-products",
 }
+
+# Upload formats a product image may use; shared with ProductForm.
+validate_image_extension = FileExtensionValidator(["png", "jpg", "jpeg", "webp"])
 
 
 class Category(models.Model):
@@ -72,6 +77,11 @@ class Product(models.Model):
         related_name="products",
     )
     tags = models.ManyToManyField(Tag, blank=True, related_name="products")
+    image = models.ImageField(
+        upload_to="products/",
+        blank=True,
+        validators=[validate_image_extension],
+    )
 
     objects = ProductQuerySet.as_manager()
 
@@ -83,3 +93,10 @@ class Product(models.Model):
 
     def get_absolute_url(self):
         return reverse("products:detail", kwargs={"slug": self.slug})
+
+    @property
+    def display_image_url(self):
+        """The uploaded image's URL, or the category placeholder when there is none."""
+        if self.image:
+            return self.image.url
+        return static(self.category.placeholder_image)

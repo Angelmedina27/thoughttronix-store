@@ -40,6 +40,24 @@ Each entry has this shape:
 - **Deviations:** One change beyond the handoff. Probing showed a `.txt` upload never got the agreed allowed-formats message: text content hit Pillow's "Upload a valid image" error first, and image bytes renamed `.txt` hit Django's form validator, which lists ~70 Pillow formats. Added a small `ProductImageField` (via `Meta.field_classes`) that checks the extension before Pillow, sharing one `validate_image_extension` with the model. On prompt 2, the user chose to keep the leftover `SyncRest GPT Text.png` rather than delete it. The handoff asked for this log entry, but this file's rule says entries are added only when prompted, so the assistant waited for prompt 3.
 - **Sideways:** A scripted Python edit read files as cp1252, so two replacements containing an em dash silently didn't match. `makemigrations` then failed with `NameError: FileExtensionValidator`, and the two blocks were fixed by hand. Shell escaping put a literal null byte in the oversized-file test, which broke pytest collection. The first byte fix hit the same escaping problem, so the padding was changed to `b"x"`. `ruff format .` also re-wrapped one unrelated, already unformatted line in `orders/services.py`. `HANDOFF.md` said `product-images/` was untracked, but it was tracked, so the moves show as git deletions. The catalog's visual layout was checked over HTTP and the Tailwind build, not in a browser.
 
+## 2026-10-04 — Design product images with `/grill-me`, then hand off with `/handoff`
+
+### Prompts
+1. `/grill-me` I need to add real product images to our catalog. Every product needs to show an uploaded image if we have one, or stick to the placeholder if it's missing. Employees should be able to upload images through the back office, but we need to reject wrong file types with a clear warning. The sample images are inside the product-images directory.
+2. I want to go with option C. Let's allow png, jpg, jpeg, and webp formats so employees get a error message if they upload anything else.
+3. Let's go with Option B. 
+4. Option B sounds good. 
+5. I agree with your recommendation. 
+6. Let's go with Option B. 
+7. Let's go with Option A. 
+8. Let's go with Option A. 
+9. Let's use Option A with object-top. 
+
+### Summary
+- **Outcome:** No code changed. An eight-question `/grill-me` interview settled the product-images design: `ImageField` plus an allowed-extensions list (png/jpg/jpeg/webp), a 5 MB limit in `ProductForm.clean_image`, `MEDIA_ROOT`/`MEDIA_URL` with DEBUG serving, one `Product.display_image_url` property for the placeholder fallback, 4:3 `object-cover object-top` catalog cards with the full image on the detail page, a back-office thumbnail plus Django's Clear checkbox, slug-named seed images in `products/seed_images/` that `seed` attaches after clearing `media/products/`, and an autouse `MEDIA_ROOT = tmp_path` test fixture. The assistant looked at the ambiguous images to map them: 12 of the 13 sample PNGs mapped to products, and the SyncRest "Text" poster was left out. Exploring the code also turned up the missing `enctype="multipart/form-data"` on the product form and the 4:3 vs 4:5 shape mismatch. `/handoff` then wrote `HANDOFF.md` at the repo root with the decisions, the filename-to-slug table, the test list, and finish-line checks, which the next session implemented.
+- **Deviations:** On Q6 the user overrode the recommendation (B, delete old files on replace/clear/delete) and chose A, Django's default, because `seed` already wipes uploads. All other answers took the recommended option, and Q1 named the allowed formats. The assistant's closing question (implement now, or write `plans/product-images.md` first) was never answered. The design's "bookkeeping" line said to append a `PROMPTS.md` entry, which conflicts with this file's prompted-only rule; the next session waited to be asked.
+- **Sideways:** On prompt 10 the assistant started building a new personal `/handoff` skill with the skill-creator before checking that the project already had one in `.claude/skills/handoff/`. The user rejected its first setup question, ran the existing `/handoff` directly, and the half-started personal skill was dropped. The interview's placeholder counts disagreed with each other ("the other 22 products" in Q4, "the other 23" in the final design); the next session's dev server showed 22.
+
 ## 2026-09-23 — Add a marketing-managed discount coupon feature
 
 ### Prompts

@@ -11,3 +11,18 @@
 <b>2. How you verified it.<b> I checked that my code worked by launching the web store in the browser. I went to the home catalog page and searched for the 3 specific products and checked to make sure that the items we updated had the "feature" badge displaged.
 
 <b>3. Judgement.<b> It was a little tricky making sure the featured badge only showed up on the products we picked instead of every product on the site. To fix it I asked Claude for assistance and it was able to force the "is_featured" value to make the feature show up correctly.
+
+## Product Images
+
+<b>1. One decision from grill me.<b> Grill-me recommended using standard Django validators for file-constraints such as what file types are allowed in relation to the images. I realized that if an employee uploads an invalid file type like a text file, which one was included in the 13 images that came from the download file on the assignment, it would cause an error. Because of this I decided to tell the agent to create a sort of filter to allow it to catch wrong file extensions and display a message of "Allowed extensions are: png, jpg, jpeg, webp."
+
+<b>2. Find the upload code.<b>  Filename- models.py Line number- 80-84 under the products folder. Line of code- "image = models.ImageField(
+        upload_to="products/",
+        blank=True,
+        validators=[validate_image_extension],
+    )" The "upload to" value tells Django to automatically create a subfolder named products/ inside our media folder and store any uploaded files in that location.
+<b>3. Follow the upload process.<b> 1. It is stored at media/products/ambientrest.png. 2. Line of code- "image = models.ImageField(
+        upload_to="products/",
+        blank=True,
+        validators=[validate_image_extension],
+    )" 3. The browser requests http://127.0.0.1:8000/media/products/ambientrest.png.jpg to load the image on screen.

@@ -28,6 +28,50 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-10 — Design an Account Security Center with `/grill-me`, then write its PRD with `/to-prd`
+
+### Prompts
+1. `/grill-me` (no plan given; the session had just been `/clear`ed).
+2. I want to design an Account Security Center for ThoughtTronix. Customers should be able to provide an email address when they create an account, change their password, and reset a forgotten password through an email loop. Please recommend any other useful account security additions that fit this scope.
+3. A. (Q1: email required at signup and unique ignoring case, enforced by a conditional database constraint; existing blank-email accounts grandfathered.)
+4. A with the alert (Q2: email change requires the current password and saves immediately; alert sent to the old address.)
+5. A (Q3: the reset form always shows the generic "If an account exists…" message.)
+6. B (Q4: reset links expire after 1 hour.)
+7. A (Q5: after a reset, send the user to the sign-in page instead of signing them in.)
+8. B (Q6: alert emails on email change, password change, and completed reset.)
+9. C and yes those numbers work for me (Q7: home-grown cache throttle, 5 failed logins per username + IP per 15 minutes, 3 reset emails per address per hour.)
+10. A (Q8: Security Center hub page with separate email and password pages.)
+11. B (Q9: add a nullable `password_changed_at`, stamped by a `User.set_password()` override.)
+12. A (Q10: `accounts/security.py` becomes a third deliberate deep module; CLAUDE.md updated to match.)
+13. A and yes admin login should go through the throttle too (Q11: the same rules for every role, and the Django admin login is throttled.)
+14. B (Q12: seed adds a blank-email customer and backdates `password_changed_at` for one or two demo users.)
+15. `/to-prd`
+16. Append a session log to PROMPTS.md at the repo root, under today's date, newest entry at the top. Record every prompt I gave you this session, in order, including any corrections. End the entry with a short summary: the outcome, any places where I deviated from a recommended answer or asked follow-up questions, and anything that went sideways.
+
+### Summary
+- **Outcome:** No application code changed. A 12-question `/grill-me` interview settled the Account Security Center design:
+  - required, case-insensitive unique emails (blank ones grandfathered)
+  - password-confirmed email change with an alert to the old address
+  - Django's built-in password change and reset views, with a generic reset message, 1-hour single-use links (`PASSWORD_RESET_TIMEOUT` from `.env`), and sign-in required after a reset
+  - alerts for email change, password change, and completed reset
+  - a cache-based throttle on login (storefront and admin) and on reset emails
+  - a `/accounts/security/` hub showing email, last sign-in, member since, and `password_changed_at`
+  - `accounts/security.py` as a third deep module
+  - seed additions so every hub state can be demoed
+
+  Before asking anything, the assistant read the code to check the current state: `SignupForm` deliberately left email out, `User.email` was optional and not unique, seed users already had `@example.com` emails, and email used the console backend. `/to-prd` then wrote `prd/account-security-center.md` (34 user stories, implementation decisions, out of scope, testing decisions, demo notes). Nothing committed.
+- **Deviations:** The user took the recommended option on every question; no recommendation was overridden. Three answers added something:
+  - Q2 explicitly accepted the old-address alert that was part of the recommendation.
+  - Q7 confirmed the proposed throttle numbers.
+  - Q11 also answered the assistant's side question and agreed to throttle the Django admin login.
+
+  The user asked no other follow-up questions. The closing summary listed four small defaults (email normalization, `DEFAULT_FROM_EMAIL`, plain-text email templates, a cache-clearing test fixture); the user went straight to `/to-prd` without objecting, so the PRD includes them. Q6 raised a conflict with CLAUDE.md's "exactly two deep modules" rule and deferred it, and Q10 settled it.
+- **Sideways:** `/grill-me` arrived with no plan, because the context had just been cleared, so the first turn read `prd/`, `plans/`, and git history and asked the user what to grill instead of starting the interview. The PRD went slightly past the template and the interview:
+  - It added a Testing Decisions section, which `/to-prd`'s template doesn't have, to match `prd/core-platform.md`.
+  - It listed "self-service account deletion" as out of scope, though the interview never discussed it.
+
+  The assistant pointed out both when it delivered the PRD. While writing this log, a first draft wrongly said the PRD names a "legacy_lou" seed user. That name was only an example in Q12 and isn't in the PRD, and the line was corrected before the log was handed over.
+
 ## 2026-10-04 — Implement product images from the HANDOFF.md design
 
 ### Prompts

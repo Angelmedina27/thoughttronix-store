@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Account security — The ThoughtTronix Store{% endblock %}
+
+{% block content %}
+  <div class="mx-auto max-w-2xl space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold">Account security</h1>
+      <p class="mt-1 opacity-70">
+        The credentials that guard your thoughts. Look for anything you don't recognize.
+      </p>
+    </div>
+
+    {% if not user.email %}
+      <div class="alert alert-warning" role="alert">
+        <div>
+          <p class="font-semibold">Your account has no email on file.</p>
+          <p class="text-sm">
+            If you forget your password, we have no way to help you back in.
+            Add an email to make this account recoverable.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <h2 class="card-title">Account details</h2>
+        <dl class="divide-y divide-base-300">
+          <div class="flex justify-between gap-4 py-3">
+            <dt class="opacity-70">Username</dt>
+            <dd class="font-medium">{{ user.username }}</dd>
+          </div>
+          <div class="flex justify-between gap-4 py-3">
+            <dt class="opacity-70">Email</dt>
+            <dd class="font-medium">
+              {% if user.email %}
+                {{ user.email }}
+              {% else %}
+                <span class="badge badge-warning">No email on file</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="flex justify-between gap-4 py-3">
+            <dt class="opacity-70">Last sign-in</dt>
+            <dd class="font-medium">
+              {% if user.last_login %}
+                {{ user.last_login|date:"M j, Y, g:i A" }}
+              {% else %}
+                Never
+              {% endif %}
+            </dd>
+          </div>
+          <div class="flex justify-between gap-4 py-3">
+            <dt class="opacity-70">Member since</dt>
+            <dd class="font-medium">{{ user.date_joined|date:"M j, Y" }}</dd>
+          </div>
+          <div class="flex justify-between gap-4 py-3">
+            <dt class="opacity-70">Password last changed</dt>
+            <dd class="font-medium">
+              {% if user.password_changed_at %}
+                {{ user.password_changed_at|date:"M j, Y" }}
+                <span class="opacity-70">({{ user.password_changed_at|timesince }} ago)</span>
+              {% else %}
+                Never changed since signup
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+{% endblock %}

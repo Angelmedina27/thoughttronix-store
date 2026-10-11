@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-11 — Account Security Center Phase 2: the Security Center hub
+
+### Prompts
+1. `@prd/account-security.md @plans/account-security.md Do Phase 2.`
+2. How can I manually verify this phase in the browser?
+3. Update PROMPTS.md with the standard prompt.
+
+### Summary
+- **Outcome:** Implemented Phase 2 of `plans/account-security-center.md` (user stories 13, 14, 15, 22, 31 for the hub, and 33). A new `SecurityCenterView` (`LoginRequiredMixin` + `TemplateView`) at `/accounts/security/` (`accounts:security`) renders `templates/accounts/security.html`. The page shows username, email, last sign-in, member since, and password last changed: a date plus "N ago", or "Never changed since signup" when null. Blank-email accounts get a warning banner and a "No email on file" badge. In `base.html`, the navbar's "Hi, username" greeting became a DaisyUI `<details>` dropdown holding "Account security" and "Sign out", so it needs no JavaScript. `seed` gained a grandfathered `oldtimer` / `oldtimer123` customer with a blank email. It also writes backdated `password_changed_at` values directly after the passwords are set: `admin` 90 days ago, `employee` 21 days ago. Every other account stays null. The seed docstring and the README's demo-logins table list `oldtimer`. Seven new tests cover the anonymous redirect, access for customer, employee and admin, the displayed details, both password-changed states, the missing-email warning, and the navbar link for signed-in users only. The full suite is green (231 passed) and `ruff` is clean. Two back-to-back `seed` runs were checked on a scratchpad copy of `db.sqlite3` and gave identical results. Nothing was committed.
+- **Deviations:** As in Phase 1, the prompt's `@` paths didn't exist, and the assistant used the `account-security-center.md` files and said so. No recommendation was overridden. Prompt 2 was a follow-up asking how to verify the phase by hand. The answer gave a per-login walkthrough (`customer`, `employee`, `admin`, `oldtimer`) and warned that `seed` rebuilds the committed `db.sqlite3` snapshot and `media/products/`. It also flagged two things for a visual check: the `<details>` dropdown may not close on an outside click, and times display in UTC.
+- **Sideways:** Nothing failed during implementation. The plan describes a navbar "user menu", but the navbar had only a greeting and a Sign out button, so the assistant built the dropdown itself. Only the rendered HTML is tested, so its look and behavior depend on the manual browser check. When this entry was written, the working tree showed `db.sqlite3` modified and `media/products/ambientrest.png.jpg` deleted. Both came from the user running `seed` on the real database while verifying by hand. The deleted image is a previously uploaded product photo from the committed grading snapshot. `seed` wipes uploads, so it can be restored with `git restore` if the snapshot should keep it.
+
 ## 2026-10-11 — Account Security Center Phase 1: email at signup and the `User` model groundwork
 
 ### Prompts

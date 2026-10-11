@@ -1,9 +1,11 @@
+from datetime import timedelta
 from http import HTTPStatus
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.urls import reverse
+from django.utils import dateformat, timezone
 
 # --- Signup -----------------------------------------------------------------
 
@@ -203,3 +205,82 @@ def test_navbar_greets_signed_in_customer(client, customer):
     assert "Hi, customer" in page
     assert "Sign out" in page
     assert reverse("accounts:signup") not in page
+
+
+# --- Security Center hub ------------------------------------------------------
+
+
+def test_security_center_redirects_anonymous_visitors_to_sign_in(client, db):
+    url = reverse("accounts:security")
+
+    response = client.get(url)
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == f"{reverse('accounts:login')}?next={url}"
+
+
+@pytest.mark.parametrize("role", ["customer", "staff_user", "admin_user"])
+def test_security_center_is_open_to_every_role(client, request, role):
+    client.force_login(request.getfixturevalue(role))
+
+    response = client.get(reverse("accounts:security"))
+
+    assert response.status_code == HTTPStatus.OK
+
+
+def test_security_center_shows_account_details(client, customer):
+    customer.email = "casey@example.com"
+    customer.save()
+    client.login(username="customer", password="customer123")
+    customer.refresh_from_db()
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert "casey@example.com" in page
+    assert "Last sign-in" in page
+    assert dateformat.format(customer.last_login, "M j, Y") in page
+    assert "Member since" in page
+    assert dateformat.format(customer.date_joined, "M j, Y") in page
+    assert "no email on file" not in page.lower()
+
+
+def test_security_center_says_password_never_changed(client, customer):
+    client.force_login(customer)
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert "Never changed since signup" in page
+
+
+def test_security_center_shows_when_password_last_changed(client, customer):
+    changed_at = timezone.now() - timedelta(days=21)
+    get_user_model().objects.filter(pk=customer.pk).update(
+        password_changed_at=changed_at
+    )
+    client.force_login(customer)
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert dateformat.format(changed_at, "M j, Y") in page
+    assert "3\xa0weeks ago" in page
+    assert "Never changed since signup" not in page
+
+
+def test_security_center_warns_accounts_without_an_email(client, customer):
+    assert customer.email == ""
+    client.force_login(customer)
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert "Your account has no email on file." in page
+
+
+def test_navbar_offers_account_security_to_signed_in_users_only(client, customer):
+    url = reverse("accounts:security")
+    assert url not in client.get(reverse("products:catalog")).content.decode()
+
+    client.force_login(customer)
+    page = client.get(reverse("products:catalog")).content.decode()
+
+    assert url in page
+    assert "Account security" in page

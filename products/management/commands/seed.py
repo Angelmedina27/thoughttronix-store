@@ -11,6 +11,10 @@ Demo logins (documented in the README):
     admin / admin123        superuser
     employee / employee123  staff, "Junior Thought Curator"
     customer / customer123  a plain customer, with order history and a live cart
+    oldtimer / oldtimer123  a grandfathered customer with no email on file
+
+``admin`` and ``employee`` have a backdated "password last changed"; every
+other account shows "Never changed since signup" in the Security Center.
 """
 
 import random
@@ -458,6 +462,16 @@ DEMO_USERS = [
         False,
         None,
     ),
+    # Signed up before emails were collected: the Security Center's
+    # missing-email warning.
+    ("oldtimer", "oldtimer123", "", "Otis", "Hale", False, False, None),
+]
+
+# Demo logins with a recorded password change: (username, days ago). The
+# rest keep a null password_changed_at.
+PASSWORD_CHANGED_DAYS_AGO = [
+    ("admin", 90),
+    ("employee", 21),
 ]
 
 # Background customers flesh out the demo world; they get order history in
@@ -609,6 +623,13 @@ class Command(BaseCommand):
             )
             user.set_password(password)
             user.save()
+
+        # Written directly after set_password, which would otherwise stamp
+        # "now" on any later password change.
+        for username, days_ago in PASSWORD_CHANGED_DAYS_AGO:
+            User.objects.filter(username=username).update(
+                password_changed_at=timezone.now() - timedelta(days=days_ago)
+            )
 
         for username, first, last in BACKGROUND_CUSTOMERS:
             user = User(

@@ -41,10 +41,11 @@ A server-rendered Django 6 storefront and back office. The PRD (`prd/core-platfo
 Logic lives in models and managers; cross-model workflows get a service
 module; views stay thin.
 
-Exactly two deliberate deep modules, docstrings and type hints on every
+Exactly three deliberate deep modules, docstrings and type hints on every
 public function: `orders/services.py` (`place_order`, with its dormant
-`coupon_code` seam) and `dashboard/queries.py` (the dashboard's
-aggregations).
+`coupon_code` seam), `dashboard/queries.py` (the dashboard's
+aggregations), and `accounts/security.py` (the Security Center's alerts
+and throttles).
 
 Idiomatic Django throughout: class-based views, model methods, custom
 managers/querysets, forms own their validation. Settings read from `.env`

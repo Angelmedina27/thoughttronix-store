@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-11 — Account Security Center Phase 3: change password, with its alert
+
+### Prompts
+1. `@prd/account-security-center.md @plans/account-security-center.md Do Phase 3.`
+2. How can I manually verify this phase in the browser?
+3. Update PROMPTS.md with the standard prompt.
+
+### Summary
+- **Outcome:** Implemented Phase 3 of `plans/account-security-center.md` (user stories 19, 20, 21, 23, 25, and 31 for alerts). The new module `accounts/security.py`, the third deliberate deep module, has a public `send_password_changed_alert(user, request) -> bool`, backed by a private `_send_alert` helper for the Phase 4 and 5 alerts to reuse. It sends nothing for accounts with no email. The alert body is the plain-text `templates/accounts/email/password_changed.txt`, which says what changed and when, and to use "Forgot password?" on the sign-in page (absolute link) if the change wasn't theirs. A new `ChangePasswordView` (Django's `PasswordChangeView` + `SuccessMessageMixin`) at `/accounts/security/password/` (`accounts:password_change`) uses a DaisyUI-styled `StyledPasswordChangeForm` and renders `templates/accounts/password_change.html`. It sends the alert after a successful change and redirects to the hub with "Your password has been changed." The hub gained a "Change password" button. `DEFAULT_FROM_EMAIL` is read from `.env` (default `ThoughtTronix <no-reply@thoughttronix.local>`) and documented in `.env.example`. `CLAUDE.md` now lists three deep modules. Ten new tests cover the anonymous redirect, the hub link, wrong-current, mismatched, and validator-failing passwords (no change, no stamp, no email), the success redirect and message, the current session surviving while a second client is signed out, the alert's recipient, sender, date and link, no alert without an email, and the setting's default. The full suite is green (241 passed) and `ruff` is clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden. This time the prompt's `@` paths were correct. The alert links to the sign-in page rather than a reset page, because the reset loop doesn't exist until Phase 5; the assistant flagged that Phase 5 could repoint it. Prompt 2 was a follow-up asking how to verify the phase by hand. The answer walked through the seeded `customer`, `oldtimer`, `employee` and `admin` logins, including a second browser to watch the other session get signed out. It warned that real password changes alter the committed `db.sqlite3` and recommended re-running `seed` afterward, which also rebuilds `media/products/`. It also flagged UTC times in the alert and Django's long password help text as things to check visually.
+- **Sideways:** The first test run went past the shell's 120-second foreground timeout and was moved to the background. The assistant's first wait loop grepped for "passed", which matched ruff's "All checks passed!" and returned before pytest finished. A second loop waited for pytest's timing line instead and got the real result. `ruff format` reformatted the new tests once. The private helper's `changed_at` parameter was first written without a type hint and fixed right away.
+
 ## 2026-10-11 — Account Security Center Phase 2: the Security Center hub
 
 ### Prompts

@@ -1,11 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, TemplateView
 
-from .forms import SignInForm, SignupForm
+from . import security
+from .forms import SignInForm, SignupForm, StyledPasswordChangeForm
 
 
 class SignupView(SuccessMessageMixin, CreateView):
@@ -43,3 +44,22 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "accounts/security.html"
+
+
+class ChangePasswordView(SuccessMessageMixin, PasswordChangeView):
+    """Change the password from the Security Center.
+
+    Django's view does the security-critical part: it keeps this session
+    signed in and, because the password hash changed, every other session
+    is signed out. This view adds the alert and the trip back to the hub.
+    """
+
+    form_class = StyledPasswordChangeForm
+    template_name = "accounts/password_change.html"
+    success_url = reverse_lazy("accounts:security")
+    success_message = "Your password has been changed."
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        security.send_password_changed_alert(self.request.user, self.request)
+        return response

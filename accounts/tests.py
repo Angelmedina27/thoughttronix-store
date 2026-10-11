@@ -2,8 +2,10 @@ from datetime import timedelta
 from http import HTTPStatus
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from django.test import Client
 from django.urls import reverse
 from django.utils import dateformat, timezone
 
@@ -284,3 +286,118 @@ def test_navbar_offers_account_security_to_signed_in_users_only(client, customer
 
     assert url in page
     assert "Account security" in page
+
+
+# --- Change password ----------------------------------------------------------
+
+
+def password_change_data(**overrides):
+    return {
+        "old_password": "customer123",
+        "new_password1": "brand-new-thoughts-42",
+        "new_password2": "brand-new-thoughts-42",
+        **overrides,
+    }
+
+
+def test_change_password_redirects_anonymous_visitors_to_sign_in(client, db):
+    url = reverse("accounts:password_change")
+
+    response = client.get(url)
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == f"{reverse('accounts:login')}?next={url}"
+
+
+def test_security_center_links_to_change_password(client, customer):
+    client.force_login(customer)
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert reverse("accounts:password_change") in page
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"old_password": "not-my-password"}, "old_password"),
+        ({"new_password2": "brand-new-thoughts-43"}, "new_password2"),
+        ({"new_password1": "12345678", "new_password2": "12345678"}, "new_password2"),
+    ],
+    ids=["wrong-current", "mismatch", "fails-validators"],
+)
+def test_change_password_rejects_bad_input(
+    client, customer, mailoutbox, overrides, field
+):
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:password_change"), password_change_data(**overrides)
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["form"].errors[field]
+    customer.refresh_from_db()
+    assert customer.check_password("customer123")
+    assert customer.password_changed_at is None
+    assert mailoutbox == []
+
+
+def test_change_password_succeeds_and_returns_to_hub(client, customer):
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:password_change"), password_change_data(), follow=True
+    )
+
+    assert response.redirect_chain[-1][0] == reverse("accounts:security")
+    page = response.content.decode()
+    assert "Your password has been changed." in page
+    assert "Never changed since signup" not in page
+    customer.refresh_from_db()
+    assert customer.check_password("brand-new-thoughts-42")
+    assert customer.password_changed_at is not None
+
+
+def test_change_password_keeps_this_session_and_ends_the_others(client, customer):
+    other_device = Client()
+    other_device.login(username="customer", password="customer123")
+    client.login(username="customer", password="customer123")
+    hub = reverse("accounts:security")
+
+    client.post(reverse("accounts:password_change"), password_change_data())
+
+    assert client.get(hub).status_code == HTTPStatus.OK
+    assert other_device.get(hub).status_code == HTTPStatus.FOUND
+
+
+def test_change_password_sends_alert_to_the_account_email(client, customer, mailoutbox):
+    customer.email = "casey@example.com"
+    customer.save()
+    client.force_login(customer)
+
+    client.post(reverse("accounts:password_change"), password_change_data())
+
+    assert len(mailoutbox) == 1
+    alert = mailoutbox[0]
+    assert alert.to == ["casey@example.com"]
+    assert alert.from_email == settings.DEFAULT_FROM_EMAIL
+    assert "password" in alert.subject.lower()
+    customer.refresh_from_db()
+    assert dateformat.format(customer.password_changed_at, "M j, Y") in alert.body
+    assert "If you didn't" in alert.body
+    assert "http://testserver" + reverse("accounts:login") in alert.body
+
+
+def test_change_password_sends_no_alert_without_an_email(client, customer, mailoutbox):
+    assert customer.email == ""
+    client.force_login(customer)
+
+    response = client.post(reverse("accounts:password_change"), password_change_data())
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert mailoutbox == []
+
+
+def test_default_from_email_has_the_documented_default():
+    assert settings.DEFAULT_FROM_EMAIL == "ThoughtTronix <no-reply@thoughttronix.local>"

@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-11 — Account Security Center Phase 1: email at signup and the `User` model groundwork
+
+### Prompts
+1. `@prd/account-security.md @plans/account-security.md Do Phase 1.`
+2. How can I manually verify this phase in the browser?
+3. Append a session log to PROMPTS.md at the repo root, under today's date, newest entry at the top. Record every prompt I gave you this session, in order, including any corrections. End the entry with a short summary: the outcome, any places where I deviated from a recommended answer or asked follow-up questions, and anything that went sideways.
+
+### Summary
+- **Outcome:** Implemented Phase 1 of `plans/account-security-center.md` (user stories 1–3). `accounts.User` gained a case-insensitive unique constraint on `email`, which skips blank emails so grandfathered accounts stay valid. It also gained email normalization (trim and lowercase) on save, a nullable `password_changed_at` field, and a `set_password()` override that stamps the field only for users that already have a primary key. A custom `UserManager.email_in_use(email, exclude_pk=None)` is ready for Phase 4's change-email form. One migration (`0002_email_unique_password_changed_at`) covers the manager, field, and constraint. `SignupForm` now requires an email and shows a friendly "An account with this email already exists." error. Existing signup tests were updated to send an email, and 11 new tests were added. The full suite is green (222 passed) and `ruff` is clean. The migration and two back-to-back `seed` runs were verified on a scratchpad copy of `db.sqlite3`, so the committed grading snapshot was not touched. Nothing was committed.
+- **Deviations:** The prompt's `@` paths (`account-security.md`) didn't exist. The assistant used the actual files, `prd/account-security-center.md` and `plans/account-security-center.md`, and said so. It did not add a PROMPTS.md entry after Phase 1, because this file says entries are only added on request. Prompt 2 was a follow-up asking how to verify the phase by hand. The answer gave browser steps for signup, the duplicate-email error, and lowercase storage (checked in the admin user list). It noted that `password_changed_at` isn't visible in the browser until the Phase 2 hub, so that check uses the Django shell. It also noted that `migrate` modifies the committed `db.sqlite3` snapshot.
+- **Sideways:** A Python string-replace script that edited `accounts/forms.py` silently failed to match. Windows Python read the file as cp1252, so the em-dash in the docstring didn't match. Only the import changes landed, and `ruff` caught them as unused imports. The form was then fixed with a direct edit, and a check of the diff found no corrupted characters. A combined lint and test command exceeded the 2-minute tool timeout because the suite takes about 2 minutes. It finished in the background and passed. One known edge was left open: if Django upgrades a password hash at sign-in, `set_password()` stamps the timestamp in memory, but Django saves only the `password` field, so the stamp isn't stored. This is harmless, and it was flagged to the user rather than guarded against.
+
 ## 2026-10-10 — Design an Account Security Center with `/grill-me`, then write its PRD with `/to-prd`
 
 ### Prompts

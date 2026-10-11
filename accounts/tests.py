@@ -1,9 +1,11 @@
-from datetime import timedelta
+import re
+from datetime import datetime, timedelta
 from http import HTTPStatus
 
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.db import IntegrityError
 from django.test import Client
 from django.urls import reverse
@@ -532,3 +534,180 @@ def test_adding_a_first_email_sends_no_alert_and_clears_the_warning(
     assert "no email on file" not in response.content.decode()
     customer.refresh_from_db()
     assert customer.email == "casey@example.com"
+
+
+# --- Forgot password ----------------------------------------------------------
+
+
+RESET_LINK = re.compile(r"http://testserver(/accounts/password/reset/[^\s]+/)")
+
+
+@pytest.fixture
+def casey(customer):
+    """The ``customer`` fixture with an email on file, so it can reset."""
+    customer.email = "casey@example.com"
+    customer.save()
+    return customer
+
+
+def request_reset_link(client, mailoutbox, email="casey@example.com"):
+    """Request a reset email and return the path of the link inside it."""
+    client.post(reverse("accounts:password_reset"), {"email": email})
+    return RESET_LINK.search(mailoutbox[-1].body).group(1)
+
+
+def strip_csrf(response):
+    return re.sub(r'"X-CSRFToken": "[^"]*"', "", response.content.decode())
+
+
+def new_password_data(**overrides):
+    return {
+        "new_password1": "brand-new-thoughts-42",
+        "new_password2": "brand-new-thoughts-42",
+        **overrides,
+    }
+
+
+def test_login_page_links_to_password_reset(client, db):
+    page = client.get(reverse("accounts:login")).content.decode()
+
+    assert "Forgot password?" in page
+    assert reverse("accounts:password_reset") in page
+
+
+def test_password_reset_page_returns_200(client, db):
+    response = client.get(reverse("accounts:password_reset"))
+
+    assert response.status_code == HTTPStatus.OK
+
+
+def test_reset_request_responds_the_same_for_known_and_unknown_emails(
+    client, casey, mailoutbox
+):
+    url = reverse("accounts:password_reset")
+
+    known = client.post(url, {"email": "casey@example.com"}, follow=True)
+    unknown = client.post(url, {"email": "nobody@example.com"}, follow=True)
+
+    assert known.redirect_chain == unknown.redirect_chain
+    assert known.redirect_chain[-1][0] == reverse("accounts:password_reset_done")
+    # The CSRF token is masked afresh on every render; blank it out.
+    assert strip_csrf(known) == strip_csrf(unknown)
+    assert len(mailoutbox) == 1
+    assert mailoutbox[0].to == ["casey@example.com"]
+
+
+def test_reset_request_matches_email_in_any_case(client, casey, mailoutbox):
+    client.post(reverse("accounts:password_reset"), {"email": "Casey@Example.COM"})
+
+    assert len(mailoutbox) == 1
+    assert mailoutbox[0].to == ["casey@example.com"]
+
+
+def test_reset_done_page_states_expiry_and_suggests_spam(client, db):
+    page = client.get(reverse("accounts:password_reset_done")).content.decode()
+
+    assert "If an account exists for that email" in page
+    assert "1 hour" in page
+    assert "spam" in page
+
+
+def test_reset_email_contains_a_working_link(client, casey, mailoutbox):
+    link = request_reset_link(client, mailoutbox)
+
+    email = mailoutbox[0]
+    assert email.from_email == settings.DEFAULT_FROM_EMAIL
+    assert "reset" in email.subject.lower()
+    assert "1 hour" in email.body
+    response = client.get(link, follow=True)
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["validlink"] is True
+    assert "form" in response.context
+
+
+def test_reset_rejects_a_password_that_fails_the_validators(client, casey, mailoutbox):
+    link = request_reset_link(client, mailoutbox)
+    form_url = client.get(link).url
+
+    response = client.post(
+        form_url, new_password_data(new_password1="12345678", new_password2="12345678")
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["form"].errors["new_password2"]
+    casey.refresh_from_db()
+    assert casey.check_password("customer123")
+
+
+def test_reset_completes_and_hands_off_to_sign_in(client, casey, mailoutbox):
+    link = request_reset_link(client, mailoutbox)
+    form_url = client.get(link).url
+
+    response = client.post(form_url, new_password_data(), follow=True)
+
+    assert response.redirect_chain[-1][0] == reverse("accounts:login")
+    assert "Your password has been reset" in response.content.decode()
+    assert not response.context["user"].is_authenticated
+    casey.refresh_from_db()
+    assert casey.check_password("brand-new-thoughts-42")
+    assert casey.password_changed_at is not None
+
+
+def test_reset_signs_out_every_other_session(client, casey, mailoutbox):
+    other_device = Client()
+    other_device.login(username="customer", password="customer123")
+    hub = reverse("accounts:security")
+    assert other_device.get(hub).status_code == HTTPStatus.OK
+
+    link = request_reset_link(client, mailoutbox)
+    client.post(client.get(link).url, new_password_data())
+
+    assert other_device.get(hub).status_code == HTTPStatus.FOUND
+
+
+def test_reset_sends_the_reset_alert(client, casey, mailoutbox):
+    link = request_reset_link(client, mailoutbox)
+
+    client.post(client.get(link).url, new_password_data())
+
+    assert len(mailoutbox) == 2
+    alert = mailoutbox[1]
+    assert alert.to == ["casey@example.com"]
+    assert alert.subject == "Your ThoughtTronix password was reset"
+    casey.refresh_from_db()
+    assert dateformat.format(casey.password_changed_at, "M j, Y") in alert.body
+    assert "If you didn't" in alert.body
+    assert "http://testserver" + reverse("accounts:password_reset") in alert.body
+
+
+def test_used_reset_link_shows_the_invalid_link_message(client, casey, mailoutbox):
+    link = request_reset_link(client, mailoutbox)
+    client.post(client.get(link).url, new_password_data())
+
+    response = Client().get(link, follow=True)
+
+    assert response.context["validlink"] is False
+    page = response.content.decode()
+    assert "invalid or has expired" in page
+    assert reverse("accounts:password_reset") in page
+
+
+def test_expired_reset_link_shows_the_invalid_link_message(
+    client, casey, mailoutbox, settings, monkeypatch
+):
+    settings.PASSWORD_RESET_TIMEOUT = 60
+    link = request_reset_link(client, mailoutbox)
+    # Step the token generator's clock past the (overridden) timeout.
+    later = datetime.now() + timedelta(seconds=61)
+    monkeypatch.setattr(PasswordResetTokenGenerator, "_now", lambda self: later)
+
+    response = client.get(link, follow=True)
+
+    assert response.context["validlink"] is False
+    assert "invalid or has expired" in response.content.decode()
+    casey.refresh_from_db()
+    assert casey.check_password("customer123")
+
+
+def test_password_reset_timeout_has_the_documented_default():
+    assert settings.PASSWORD_RESET_TIMEOUT == 3600

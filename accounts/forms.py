@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth.forms import (
     AuthenticationForm,
     PasswordChangeForm,
+    PasswordResetForm,
+    SetPasswordForm,
     UserCreationForm,
 )
 
@@ -47,6 +49,30 @@ class SignInForm(AuthenticationForm):
 class StyledPasswordChangeForm(PasswordChangeForm):
     """Django's stock password-change form — current password, new password
     twice, the configured validators — dressed in DaisyUI."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "input w-full"
+
+
+class StyledPasswordResetForm(PasswordResetForm):
+    """Django's stock reset-request form, dressed in DaisyUI.
+
+    The stock form already does the security-critical part: it matches the
+    email case-insensitively, mails only active accounts with a usable
+    password, and behaves identically whether or not an account exists.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "input w-full"
+
+
+class StyledSetPasswordForm(SetPasswordForm):
+    """Django's stock choose-a-new-password form — new password twice, the
+    same validators as signup — dressed in DaisyUI."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -59,6 +59,27 @@ def send_email_changed_alert(user: User, old_email: str, request: HttpRequest) -
     )
 
 
+def send_password_reset_alert(user: User, request: HttpRequest) -> bool:
+    """Tell ``user`` their password was just reset through the forgot-password
+    loop.
+
+    A reset the owner didn't request means someone else controls their
+    inbox or their reset link, so the email says when it happened and
+    links straight to a fresh reset. Accounts with no email on file are
+    skipped — though without one they can't reach the reset loop anyway.
+
+    Returns whether an email was sent.
+    """
+    return _send_alert(
+        user,
+        request,
+        recipient=user.email,
+        subject="Your ThoughtTronix password was reset",
+        template_name="accounts/email/password_reset_completed.txt",
+        changed_at=user.password_changed_at,
+    )
+
+
 def _send_alert(
     user: User,
     request: HttpRequest,
@@ -76,6 +97,7 @@ def _send_alert(
             "user": user,
             "changed_at": changed_at or timezone.now(),
             "login_url": request.build_absolute_uri(reverse("accounts:login")),
+            "reset_url": request.build_absolute_uri(reverse("accounts:password_reset")),
         },
     )
     send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])

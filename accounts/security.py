@@ -30,9 +30,32 @@ def send_password_changed_alert(user: User, request: HttpRequest) -> bool:
     return _send_alert(
         user,
         request,
+        recipient=user.email,
         subject="Your ThoughtTronix password was changed",
         template_name="accounts/email/password_changed.txt",
         changed_at=user.password_changed_at,
+    )
+
+
+def send_email_changed_alert(user: User, old_email: str, request: HttpRequest) -> bool:
+    """Tell the *previous* address that ``user``'s email was just changed.
+
+    The alert goes to ``old_email``, not the new address: if someone else
+    redirected the account, the real owner is the one still reading the
+    old inbox. Nothing is sent when there was no previous email, or when
+    the address didn't actually change.
+
+    Returns whether an email was sent.
+    """
+    if old_email == user.email:
+        return False
+    return _send_alert(
+        user,
+        request,
+        recipient=old_email,
+        subject="Your ThoughtTronix email address was changed",
+        template_name="accounts/email/email_changed.txt",
+        changed_at=None,
     )
 
 
@@ -40,11 +63,12 @@ def _send_alert(
     user: User,
     request: HttpRequest,
     *,
+    recipient: str,
     subject: str,
     template_name: str,
     changed_at: datetime | None,
 ) -> bool:
-    if not user.email:
+    if not recipient:
         return False
     body = render_to_string(
         template_name,
@@ -54,5 +78,5 @@ def _send_alert(
             "login_url": request.build_absolute_uri(reverse("accounts:login")),
         },
     )
-    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email])
+    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
     return True

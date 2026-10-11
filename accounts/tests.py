@@ -401,3 +401,134 @@ def test_change_password_sends_no_alert_without_an_email(client, customer, mailo
 
 def test_default_from_email_has_the_documented_default():
     assert settings.DEFAULT_FROM_EMAIL == "ThoughtTronix <no-reply@thoughttronix.local>"
+
+
+# --- Change email -------------------------------------------------------------
+
+
+def email_change_data(**overrides):
+    return {
+        "email": "casey@example.com",
+        "current_password": "customer123",
+        **overrides,
+    }
+
+
+def test_change_email_redirects_anonymous_visitors_to_sign_in(client, db):
+    url = reverse("accounts:email_change")
+
+    response = client.get(url)
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == f"{reverse('accounts:login')}?next={url}"
+
+
+def test_security_center_links_to_change_email(client, customer):
+    client.force_login(customer)
+
+    page = client.get(reverse("accounts:security")).content.decode()
+
+    assert reverse("accounts:email_change") in page
+
+
+def test_change_email_rejects_a_wrong_current_password(client, customer, mailoutbox):
+    customer.email = "old@example.com"
+    customer.save()
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:email_change"),
+        email_change_data(current_password="not-my-password"),
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["form"].errors["current_password"]
+    customer.refresh_from_db()
+    assert customer.email == "old@example.com"
+    assert mailoutbox == []
+
+
+def test_change_email_rejects_another_accounts_email_in_any_case(
+    client, customer, staff_user, mailoutbox
+):
+    staff_user.email = "taken@example.com"
+    staff_user.save()
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:email_change"), email_change_data(email="TAKEN@Example.com")
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert "already exists" in response.context["form"].errors["email"][0]
+    customer.refresh_from_db()
+    assert customer.email == ""
+    assert mailoutbox == []
+
+
+def test_change_email_accepts_re_entering_ones_own_email(client, customer, mailoutbox):
+    customer.email = "casey@example.com"
+    customer.save()
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:email_change"), email_change_data(email="Casey@Example.com")
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    customer.refresh_from_db()
+    assert customer.email == "casey@example.com"
+    assert mailoutbox == []
+
+
+def test_change_email_stores_normalized_email_and_returns_to_hub(client, customer):
+    customer.email = "old@example.com"
+    customer.save()
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:email_change"),
+        email_change_data(email="  New.Casey@Example.COM "),
+        follow=True,
+    )
+
+    assert response.redirect_chain[-1][0] == reverse("accounts:security")
+    page = response.content.decode()
+    assert "Your email has been updated." in page
+    assert "new.casey@example.com" in page
+    customer.refresh_from_db()
+    assert customer.email == "new.casey@example.com"
+
+
+def test_change_email_sends_alert_to_the_old_address(client, customer, mailoutbox):
+    customer.email = "old@example.com"
+    customer.save()
+    client.force_login(customer)
+
+    client.post(reverse("accounts:email_change"), email_change_data())
+
+    assert len(mailoutbox) == 1
+    alert = mailoutbox[0]
+    assert alert.to == ["old@example.com"]
+    assert alert.from_email == settings.DEFAULT_FROM_EMAIL
+    assert "email" in alert.subject.lower()
+    assert "casey@example.com" in alert.body
+    assert dateformat.format(timezone.now(), "M j, Y") in alert.body
+    assert "If you didn't" in alert.body
+    assert "http://testserver" + reverse("accounts:login") in alert.body
+
+
+def test_adding_a_first_email_sends_no_alert_and_clears_the_warning(
+    client, customer, mailoutbox
+):
+    assert customer.email == ""
+    client.force_login(customer)
+
+    response = client.post(
+        reverse("accounts:email_change"), email_change_data(), follow=True
+    )
+
+    assert mailoutbox == []
+    assert "no email on file" not in response.content.decode()
+    customer.refresh_from_db()
+    assert customer.email == "casey@example.com"

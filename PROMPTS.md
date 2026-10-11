@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-11 — Account Security Center Phase 4: change email, with its alert
+
+### Prompts
+1. `@prd/account-security-center.md @plans/account-security-center.md Do Phase 4.`
+2. How can I manually verify this phase in the browser?
+3. Update PROMPTS.md with the standard prompt.
+
+### Summary
+- **Outcome:** Implemented Phase 4 of `plans/account-security-center.md` (user stories 16, 17, 18, 21). `accounts/security.py` gained a public `send_email_changed_alert(user, old_email, request) -> bool`. It sends to the *old* address and skips the send when there was no previous email or the address didn't change. The private `_send_alert` helper now takes an explicit `recipient`; the Phase 3 password alert passes `user.email`, so its behavior is unchanged. The new alert body is `templates/accounts/email/email_changed.txt`. It names the new address and the time, and says to sign in and change the email and password, or contact support, if the change wasn't theirs. A new `EmailChangeForm` (a plain form taking the user) validates the current password and applies `User.objects.email_in_use(..., exclude_pk=user.pk)`, so re-entering one's own address is allowed. A new `ChangeEmailView` (`LoginRequiredMixin` + `SuccessMessageMixin` + `FormView`) at `/accounts/security/email/` (`accounts:email_change`) renders `templates/accounts/email_change.html`. On success it saves the email, sends the alert, and redirects to the hub with "Your email has been updated." The hub gained a "Change email" / "Add email" button, and the missing-email warning gained an "Add an email" button. Eight new tests cover the anonymous redirect, the hub link, a wrong password, a duplicate email in different capitalization, re-entering one's own email, normalization with the redirect and message, the alert going to the old address only, and adding a first email (no alert, warning cleared). The full suite is green (249 passed) and `ruff` is clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden. The assistant chose a plain `forms.Form` over a `ModelForm` because a `ModelForm` would change the signed-in user's in-memory email on a failed submission. It flagged that including the new address in the alert is a judgment call, and that the alert doesn't point to "Forgot password?" because a reset would now go to the new address, which is worth revisiting in Phase 5. Prompt 2 was a follow-up asking how to verify the phase by hand. The answer walked through the seeded `customer`, `oldtimer`, `employee` and `admin` logins and checked the alert's recipient in the `runserver` terminal. It recommended re-running `seed` afterward, since the changes alter the committed `db.sqlite3`.
+- **Sideways:** Nothing significant. `ruff format` reformatted two files once. The assistant did not open the pages in a browser itself; verification was by tests only.
+
 ## 2026-10-11 — Account Security Center Phase 3: change password, with its alert
 
 ### Prompts

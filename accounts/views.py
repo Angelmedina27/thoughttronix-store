@@ -3,10 +3,15 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, TemplateView
+from django.views.generic import CreateView, FormView, TemplateView
 
 from . import security
-from .forms import SignInForm, SignupForm, StyledPasswordChangeForm
+from .forms import (
+    EmailChangeForm,
+    SignInForm,
+    SignupForm,
+    StyledPasswordChangeForm,
+)
 
 
 class SignupView(SuccessMessageMixin, CreateView):
@@ -63,3 +68,28 @@ class ChangePasswordView(SuccessMessageMixin, PasswordChangeView):
         response = super().form_valid(form)
         security.send_password_changed_alert(self.request.user, self.request)
         return response
+
+
+class ChangeEmailView(LoginRequiredMixin, SuccessMessageMixin, FormView):
+    """Add or change the account's email from the Security Center.
+
+    The change takes effect immediately; the alert goes to the *previous*
+    address, so the real owner hears about it even if the new address
+    isn't theirs.
+    """
+
+    form_class = EmailChangeForm
+    template_name = "accounts/email_change.html"
+    success_url = reverse_lazy("accounts:security")
+    success_message = "Your email has been updated."
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        old_email = self.request.user.email
+        user = form.save()
+        security.send_email_changed_alert(user, old_email, self.request)
+        return super().form_valid(form)

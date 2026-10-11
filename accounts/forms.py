@@ -52,3 +52,45 @@ class StyledPasswordChangeForm(PasswordChangeForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs["class"] = "input w-full"
+
+
+class EmailChangeForm(forms.Form):
+    """Add or change the signed-in user's email, proven by their current
+    password.
+
+    The new address is held to the signup uniqueness rule, except that a
+    user may re-enter their own address.
+    """
+
+    email = forms.EmailField(label="New email")
+    current_password = forms.CharField(
+        label="Current password",
+        strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+
+    def __init__(self, user, *args, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        self.fields["email"].widget.attrs["autocomplete"] = "email"
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "input w-full"
+
+    def clean_email(self):
+        email = normalize_email(self.cleaned_data["email"])
+        if User.objects.email_in_use(email, exclude_pk=self.user.pk):
+            raise forms.ValidationError("An account with this email already exists.")
+        return email
+
+    def clean_current_password(self):
+        password = self.cleaned_data["current_password"]
+        if not self.user.check_password(password):
+            raise forms.ValidationError(
+                "Your current password was entered incorrectly."
+            )
+        return password
+
+    def save(self) -> User:
+        self.user.email = self.cleaned_data["email"]
+        self.user.save(update_fields=["email"])
+        return self.user

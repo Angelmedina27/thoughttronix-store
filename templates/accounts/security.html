@@ -20,6 +20,7 @@
             Add an email to make this account recoverable.
           </p>
         </div>
+        <a href="{% url 'accounts:email_change' %}" class="btn btn-sm">Add an email</a>
       </div>
     {% endif %}
 
@@ -68,6 +69,9 @@
           </div>
         </dl>
         <div class="card-actions mt-2 justify-end">
+          <a href="{% url 'accounts:email_change' %}" class="btn btn-outline btn-sm">
+            {% if user.email %}Change email{% else %}Add email{% endif %}
+          </a>
           <a href="{% url 'accounts:password_change' %}" class="btn btn-outline btn-sm">Change password</a>
         </div>
       </div>

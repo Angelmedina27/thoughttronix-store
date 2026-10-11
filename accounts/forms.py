@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth.forms import (
     AuthenticationForm,
     PasswordChangeForm,
@@ -7,6 +8,7 @@ from django.contrib.auth.forms import (
     UserCreationForm,
 )
 
+from . import security
 from .models import User, normalize_email
 
 
@@ -37,13 +39,48 @@ class SignupForm(UserCreationForm):
         return email
 
 
-class SignInForm(AuthenticationForm):
-    """The stock authentication form, dressed in DaisyUI."""
+class LoginThrottleMixin:
+    """Lock out a username + network address after repeated failed sign-ins.
+
+    Mix in ahead of an ``AuthenticationForm``; the login views already pass
+    the form its ``request``. A locked-out pair is turned away before the
+    password is even checked, so a correct guess during the lockout teaches
+    an attacker nothing. A successful sign-in clears the count.
+    """
+
+    def clean(self):
+        username = self.cleaned_data.get("username")
+        if username is None:
+            return super().clean()
+        ip = self._client_ip()
+        if not security.login_allowed(username, ip):
+            raise forms.ValidationError(security.LOCKOUT_MESSAGE, code="locked_out")
+        try:
+            cleaned_data = super().clean()
+        except forms.ValidationError:
+            security.record_login_failure(username, ip)
+            raise
+        security.clear_login_failures(username, ip)
+        return cleaned_data
+
+    def _client_ip(self) -> str:
+        if self.request is None:
+            return "unknown"
+        return self.request.META.get("REMOTE_ADDR") or "unknown"
+
+
+class SignInForm(LoginThrottleMixin, AuthenticationForm):
+    """The stock authentication form, throttled and dressed in DaisyUI."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs["class"] = "input w-full"
+
+
+class AdminSignInForm(LoginThrottleMixin, AdminAuthenticationForm):
+    """The Django admin's sign-in form — which still turns away non-staff —
+    under the same lockout as the storefront."""
 
 
 class StyledPasswordChangeForm(PasswordChangeForm):
@@ -57,17 +94,38 @@ class StyledPasswordChangeForm(PasswordChangeForm):
 
 
 class StyledPasswordResetForm(PasswordResetForm):
-    """Django's stock reset-request form, dressed in DaisyUI.
+    """Django's stock reset-request form, rate-limited and dressed in DaisyUI.
 
     The stock form already does the security-critical part: it matches the
     email case-insensitively, mails only active accounts with a usable
     password, and behaves identically whether or not an account exists.
+    Emails over the per-address limit are skipped silently, so a throttled
+    request looks exactly like any other.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs["class"] = "input w-full"
+
+    def send_mail(
+        self,
+        subject_template_name,
+        email_template_name,
+        context,
+        from_email,
+        to_email,
+        html_email_template_name=None,
+    ):
+        if security.allow_reset_email(to_email):
+            super().send_mail(
+                subject_template_name,
+                email_template_name,
+                context,
+                from_email,
+                to_email,
+                html_email_template_name=html_email_template_name,
+            )
 
 
 class StyledSetPasswordForm(SetPasswordForm):

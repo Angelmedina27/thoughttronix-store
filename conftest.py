@@ -9,6 +9,7 @@ from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
@@ -21,6 +22,12 @@ from products.models import Category, Product, Tag
 def media_root(settings, tmp_path):
     """Keep test uploads out of the real ``media/`` directory."""
     settings.MEDIA_ROOT = tmp_path
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Start every test with empty throttle counters."""
+    cache.clear()
 
 
 def png_bytes():

@@ -28,6 +28,18 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-11 — Account Security Center Phase 6: sign-in lockout and reset-email rate limit
+
+### Prompts
+1. `@prd/account-security-center.md @plans/account-security-center.md Do Phase 6.`
+2. How can I manually verify this phase in the browser?
+3. Update PROMPTS.md with the standard prompt.
+
+### Summary
+- **Outcome:** Implemented Phase 6 of `plans/account-security-center.md` (user stories 26–32). `accounts/security.py` gained the two cache-backed throttles. The login throttle is `login_allowed`, `record_login_failure` and `clear_login_failures`. It counts per username and IP under hashed cache keys: 5 failures in a 15-minute window lock the pair out for 15 minutes, and the count starts from zero once the lockout lifts. The reset throttle is `allow_reset_email`, which allows 3 emails per address per hour, ignoring case. Both use fixed windows that open with the first counted event. In `accounts/forms.py`, a shared `LoginThrottleMixin` refuses a locked-out pair before checking the password ("Too many attempts — try again in 15 minutes."). It records any failed sign-in and clears the count on success. The mixin is applied to `SignInForm` and to a new `AdminSignInForm`. `AdminSignInForm` extends Django's `AdminAuthenticationForm`, so non-staff are still turned away. `accounts/admin.py` sets `admin.site.login_form` to it. `StyledPasswordResetForm` overrides `send_mail` to skip over-limit emails silently, so the response is unchanged. `conftest.py` gained an autouse `clear_cache` fixture. Thirteen new tests cover the security module directly (lockout on the fifth failure, per-pair counts, clearing, lockout expiry and the reset limit with its expiry; expiry tests move `time.time` forward). They also cover the storefront lockout on the sixth attempt with the correct password, another IP not locking out the owner, success resetting the count, the admin lockout, admin still rejecting non-staff and admitting staff, and a fourth reset request sending nothing but returning an identical response. The full suite is green (275 passed) and `ruff` is clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden. The assistant made three calls the plan left open. A non-staff user with a correct password at `/admin/` counts as a failed sign-in. Reset requests for unknown emails aren't counted, since nothing is sent. The storefront and admin logins share one counter per username and IP. Prompt 2 was a follow-up asking how to verify the phase by hand. The answer walked through the storefront lockout, the lockout being per username, success clearing the count, the admin lockout and non-staff rejection, and the reset-email limit as seen in the `runserver` terminal. It noted that any server restart, including auto-reload, clears the in-memory counters. It also noted that the "different IP" case can't easily be shown from one browser and is covered by a test.
+- **Sideways:** A heredoc used to edit `accounts/security.py` turned an intended `\0` separator in the cache-key f-string into a literal NUL byte. A follow-up `grep` reported the file as binary, which caught it. The byte was replaced with a `|` separator, which can't appear in a valid username or an IP address, before any tests ran. The full suite takes about three minutes to run.
+
 ## 2026-10-11 — Account Security Center Phase 5: the forgot-password loop
 
 ### Prompts

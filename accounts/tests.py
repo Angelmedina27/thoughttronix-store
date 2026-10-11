@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime, timedelta
 from http import HTTPStatus
 
@@ -10,6 +11,8 @@ from django.db import IntegrityError
 from django.test import Client
 from django.urls import reverse
 from django.utils import dateformat, timezone
+
+from accounts import security
 
 # --- Signup -----------------------------------------------------------------
 
@@ -711,3 +714,154 @@ def test_expired_reset_link_shows_the_invalid_link_message(
 
 def test_password_reset_timeout_has_the_documented_default():
     assert settings.PASSWORD_RESET_TIMEOUT == 3600
+
+
+# --- Brute-force protection: the security module ------------------------------
+
+
+def fail_logins(times, username="customer", ip="10.0.0.1"):
+    for _ in range(times):
+        security.record_login_failure(username, ip)
+
+
+def test_login_is_allowed_until_the_fifth_failure():
+    fail_logins(4)
+    assert security.login_allowed("customer", "10.0.0.1")
+
+    assert security.record_login_failure("customer", "10.0.0.1") is True
+    assert not security.login_allowed("customer", "10.0.0.1")
+
+
+def test_login_failures_count_per_username_and_ip():
+    fail_logins(5)
+
+    assert not security.login_allowed("customer", "10.0.0.1")
+    assert security.login_allowed("customer", "10.0.0.2")
+    assert security.login_allowed("employee", "10.0.0.1")
+
+
+def test_clearing_login_failures_starts_the_count_again():
+    fail_logins(4)
+
+    security.clear_login_failures("customer", "10.0.0.1")
+    fail_logins(4)
+
+    assert security.login_allowed("customer", "10.0.0.1")
+
+
+def test_login_lockout_expires(monkeypatch):
+    fail_logins(5)
+    later = time.time() + security.LOGIN_LOCKOUT + 1
+    monkeypatch.setattr(time, "time", lambda: later)
+
+    assert security.login_allowed("customer", "10.0.0.1")
+    # Counting starts again from zero once the lockout lifts.
+    fail_logins(4)
+    assert security.login_allowed("customer", "10.0.0.1")
+
+
+def test_reset_emails_are_limited_per_address():
+    assert [security.allow_reset_email("casey@example.com") for _ in range(4)] == [
+        True,
+        True,
+        True,
+        False,
+    ]
+    assert not security.allow_reset_email("Casey@Example.com")
+    assert security.allow_reset_email("someone-else@example.com")
+
+
+def test_reset_email_limit_expires(monkeypatch):
+    for _ in range(3):
+        security.allow_reset_email("casey@example.com")
+    later = time.time() + security.RESET_EMAIL_WINDOW + 1
+    monkeypatch.setattr(time, "time", lambda: later)
+
+    assert security.allow_reset_email("casey@example.com")
+
+
+# --- Brute-force protection: sign-in lockout ------------------------------------
+
+
+def sign_in(client, password, url=None, ip="127.0.0.1", username="customer"):
+    return client.post(
+        url or reverse("accounts:login"),
+        {"username": username, "password": password},
+        REMOTE_ADDR=ip,
+    )
+
+
+def test_sixth_sign_in_is_locked_out_even_with_the_right_password(client, customer):
+    for _ in range(5):
+        sign_in(client, "wrong")
+
+    response = sign_in(client, "customer123")
+
+    assert response.status_code == HTTPStatus.OK
+    assert "Too many attempts — try again in 15 minutes." in response.content.decode()
+    assert not response.context["user"].is_authenticated
+
+
+def test_failing_from_another_ip_does_not_lock_out_the_owner(client, customer):
+    for _ in range(5):
+        sign_in(Client(), "wrong", ip="203.0.113.9")
+
+    response = sign_in(client, "customer123")
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.wsgi_request.user == customer
+
+
+def test_successful_sign_in_resets_the_failure_count(client, customer):
+    for _ in range(4):
+        sign_in(client, "wrong")
+    sign_in(client, "customer123")
+    client.post(reverse("accounts:logout"))
+
+    for _ in range(4):
+        sign_in(client, "wrong")
+    response = sign_in(client, "customer123")
+
+    assert response.status_code == HTTPStatus.FOUND
+
+
+def test_admin_login_is_locked_out_after_five_failures(client, admin_user):
+    url = reverse("admin:login")
+    for _ in range(5):
+        sign_in(client, "wrong", url=url, username="admin")
+
+    response = sign_in(client, "password", url=url, username="admin")
+
+    assert response.status_code == HTTPStatus.OK
+    assert "Too many attempts — try again in 15 minutes." in response.content.decode()
+    assert client.get(reverse("admin:index")).status_code == HTTPStatus.FOUND
+
+
+def test_admin_login_still_rejects_non_staff(client, customer):
+    response = sign_in(client, "customer123", url=reverse("admin:login"))
+
+    assert response.status_code == HTTPStatus.OK
+    assert not response.context["user"].is_authenticated
+
+
+def test_admin_login_signs_in_staff(client, admin_user):
+    response = sign_in(client, "password", url=reverse("admin:login"), username="admin")
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert client.get(reverse("admin:index")).status_code == HTTPStatus.OK
+
+
+# --- Brute-force protection: reset-email rate limit -----------------------------
+
+
+def test_fourth_reset_request_sends_nothing_but_looks_the_same(
+    client, casey, mailoutbox
+):
+    url = reverse("accounts:password_reset")
+    responses = [
+        client.post(url, {"email": "casey@example.com"}, follow=True) for _ in range(4)
+    ]
+
+    assert len(mailoutbox) == 3
+    assert responses[3].redirect_chain == responses[0].redirect_chain
+    assert strip_csrf(responses[3]) == strip_csrf(responses[0])

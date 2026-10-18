@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Review {{ product.name }} — The ThoughtTronix Store{% endblock %}
+{% block title %}{% if object %}Edit your review of{% else %}Review{% endif %} {{ product.name }} — The ThoughtTronix Store{% endblock %}
 
 {% block content %}
   <div class="breadcrumbs mb-6 text-sm">
     <ul>
       <li><a href="{% url 'products:catalog' %}">Catalog</a></li>
       <li><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></li>
-      <li>Write a review</li>
+      <li>{% if object %}Edit your review{% else %}Write a review{% endif %}</li>
     </ul>
   </div>
 
   <div class="mx-auto max-w-2xl">
-    <h1 class="text-3xl font-bold">Review {{ product.name }}</h1>
-    <p class="mt-1 opacity-70">Tell other shoppers how it went. Your review goes live right away.</p>
+    <h1 class="text-3xl font-bold">{% if object %}Edit your review of{% else %}Review{% endif %} {{ product.name }}</h1>
+    <p class="mt-1 opacity-70">{% if object %}Changed your mind? Your update goes live right away.{% else %}Tell other shoppers how it went. Your review goes live right away.{% endif %}</p>
 
     <form method="post" class="card mt-6 bg-base-100 shadow-md">
       {% csrf_token %}
@@ -40,7 +40,7 @@
 
         <div class="flex justify-end gap-2">
           <a href="{{ product.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
-          <button type="submit" class="btn btn-primary">Post review</button>
+          <button type="submit" class="btn btn-primary">{% if object %}Save changes{% else %}Post review{% endif %}</button>
         </div>
       </div>
     </form>

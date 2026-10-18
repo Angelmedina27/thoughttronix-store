@@ -74,8 +74,14 @@ class ProductDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         reviews = self.object.reviews.visible()
-        context["reviews"] = reviews.select_related("user")
         context["rating_summary"] = reviews.rating_summary()
+        # The viewer's own review is pinned above everyone else's.
+        own_review = None
+        if self.request.user.is_authenticated:
+            own_review = reviews.filter(user=self.request.user).first()
+            reviews = reviews.exclude(user=self.request.user)
+        context["own_review"] = own_review
+        context["reviews"] = reviews.select_related("user")
         context["can_review"] = Review.objects.can_create(
             self.request.user, self.object
         )

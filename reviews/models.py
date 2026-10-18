@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -5,6 +7,9 @@ from django.utils import timezone
 
 from orders.models import Order, OrderItem
 from products.models import Product
+
+# Saves within this window of creation don't mark a review as edited.
+EDIT_GRACE = timedelta(seconds=60)
 
 
 class ReviewQuerySet(models.QuerySet):
@@ -79,3 +84,8 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.rating}★ {self.product.name} by {self.user.username}"
+
+    @property
+    def edited(self):
+        """Whether the review was saved again more than a minute after posting."""
+        return self.updated_at - self.created_at > EDIT_GRACE

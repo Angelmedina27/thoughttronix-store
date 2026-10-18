@@ -28,6 +28,23 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 2: edit your review (TDD)
+
+### Prompts
+1. `/tdd @prd/product-reviews.md @plans/product-reviews.md implement phase 2`
+2. Yes, I approve these three behaviors and agree with using a 60-second threshold for the edited marker.
+3. Yes, I approve this test. Go ahead and write the code to make it pass.
+4. Let's keep Behavior 2 as a regression guard and move on.
+5. Yes approved, write the code to make it pass.
+6. Yes, go ahead with Phase 2.
+7. How can I manually verify this phase in the browser?
+8. Update PROMPTS.md with the standard prompt for completing phase 2
+
+### Summary
+- **Outcome:** Implemented Phase 2 of `plans/product-reviews.md` (user stories 6, 14, 16, 17, 18) using the `tdd` skill for three approved behaviors. (1) The write URL edits an existing review in place. `ReviewWriteView` became an `UpdateView` whose object is the user's existing review, or `None` for the create form. Its `test_func` passes owners through and falls back to `can_create` for everyone else, and the success message reads "Thanks — your review is updated." for edits. (2) Editing still works after the order is cancelled, because ownership alone gates editing. (3) `Review.edited` is true only when `updated_at` is more than 60 seconds after `created_at` (an `EDIT_GRACE` module constant, strict `>`). Each was shown RED with an approved test before the code was written. The rest of the phase was built with normal tests. The edit form says "Edit your review of …" with a "Save changes" button and opens prefilled. The product page says "Edit your review" instead of "Write a review" for a customer who already reviewed the product. A new `_review_card.html` partial shows "· edited" beside the date on edited reviews. `ProductDetailView` passes the viewer's own visible review as `own_review`, pinned first with a "Your review" badge and left out of the list below. The full suite is green (328 passed) and `ruff` is clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden. The user approved the three proposed behaviors and the suggested 60-second threshold, and kept behavior 2 as a regression guard after the assistant pointed out that behavior 1's change would make it pass immediately. The assistant chose the "updated" success wording and showed it for review with the test. It limited the pinned review to visible reviews and left the author's hidden-review view to Phase 7, so for now a customer whose review is hidden sees neither the review nor an Edit button. Prompt 7 was a follow-up asking how to verify the phase by hand. The answer used the seeded `customer` and `employee` logins: write a MindSync review, wait over a minute and edit it to see the "edited" marker, cancel the order from the back office and edit again, check the pages that should stay unchanged, and add a review from another user in the Django shell to see the pin.
+- **Sideways:** Behavior 1's first run failed with an `IndexError` on an empty redirect chain rather than an assertion. That was fixed mechanically by asserting on the whole redirect chain, so RED was a real assertion failure. Behavior 2 passed on its first run because behavior 1 had already implemented it. To show it still guards something, the assistant temporarily removed the ownership check, watched the test fail with 403, and restored the view. Behavior 3 first failed with an `AttributeError`, so a placeholder property returning False was added before showing RED. Ruff reformatted `reviews/tests.py`. The assistant did not open the pages in a browser itself; verification was by tests only.
+
 ## 2026-10-17 — Product Reviews Phase 1: write a review and see it on the product page
 
 ### Prompts

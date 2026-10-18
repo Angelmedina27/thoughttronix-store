@@ -12,27 +12,20 @@
         </p>
       {% endif %}
     </div>
-    {% if can_review %}
+    {% if own_review %}
+      <a href="{% url 'reviews:write' product.slug %}" class="btn btn-outline btn-primary btn-sm">Edit your review</a>
+    {% elif can_review %}
       <a href="{% url 'reviews:write' product.slug %}" class="btn btn-primary btn-sm">Write a review</a>
     {% endif %}
   </div>
 
-  {% if reviews %}
+  {% if own_review or reviews %}
     <ul class="mt-6 space-y-4">
+      {% if own_review %}
+        {% include "reviews/partials/_review_card.html" with review=own_review own=True %}
+      {% endif %}
       {% for review in reviews %}
-        <li class="card bg-base-100 shadow-md">
-          <div class="card-body gap-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              {% include "reviews/partials/_stars.html" with rating=review.rating %}
-              <span class="text-sm opacity-60">{{ review.created_at|date:"M j, Y" }}</span>
-            </div>
-            <p>{{ review.comment|linebreaksbr }}</p>
-            <p class="text-sm opacity-70">
-              — {{ review.user.username }}
-              <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
-            </p>
-          </div>
-        </li>
+        {% include "reviews/partials/_review_card.html" %}
       {% endfor %}
     </ul>
   {% else %}

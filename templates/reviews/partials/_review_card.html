@@ -1,0 +1,19 @@
+{# One review in the product page's list; ``own`` marks the viewer's pinned review. #}
+<li class="card bg-base-100 shadow-md{% if own %} border border-primary{% endif %}">
+  <div class="card-body gap-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        {% include "reviews/partials/_stars.html" with rating=review.rating %}
+        {% if own %}<span class="badge badge-primary badge-sm">Your review</span>{% endif %}
+      </div>
+      <span class="text-sm opacity-60">
+        {{ review.created_at|date:"M j, Y" }}{% if review.edited %} · edited{% endif %}
+      </span>
+    </div>
+    <p>{{ review.comment|linebreaksbr }}</p>
+    <p class="text-sm opacity-70">
+      — {{ review.user.username }}
+      <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
+    </p>
+  </div>
+</li>

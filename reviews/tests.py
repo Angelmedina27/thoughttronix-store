@@ -138,6 +138,18 @@ def test_reviews_come_newest_first(review, other_customer, product):
     assert list(Review.objects.all()) == [newer, review]
 
 
+@pytest.mark.parametrize(
+    ("seconds_later", "edited"),
+    [(0, False), (60, False), (61, True), (3600, True)],
+)
+def test_a_review_is_edited_only_when_saved_over_a_minute_later(
+    review, seconds_later, edited
+):
+    review.updated_at = review.created_at + timedelta(seconds=seconds_later)
+
+    assert review.edited is edited
+
+
 # --- Form --------------------------------------------------------------------
 
 
@@ -252,6 +264,62 @@ def test_an_unknown_product_is_404(client, customer):
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
+# --- Editing a review --------------------------------------------------------
+
+
+def test_saving_an_existing_review_updates_it_in_place(
+    client, review, customer, product
+):
+    client.force_login(customer)
+
+    response = client.post(
+        write_url(product),
+        {"rating": "2", "comment": "Six months in, it started finishing my sentences."},
+        follow=True,
+    )
+
+    assert response.redirect_chain == [(product.get_absolute_url(), HTTPStatus.FOUND)]
+    assert "your review is updated" in response.content.decode()
+    updated = Review.objects.get()
+    assert updated.pk == review.pk
+    assert updated.rating == 2
+    assert updated.comment == "Six months in, it started finishing my sentences."
+
+
+def test_editing_still_works_after_the_order_is_cancelled(
+    client, review, delivered_order, customer, product
+):
+    delivered_order.status = Order.Status.CANCELLED
+    delivered_order.save()
+    client.force_login(customer)
+
+    response = client.post(
+        write_url(product),
+        {"rating": "1", "comment": "Refunded, but I stand by every word of this."},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    review.refresh_from_db()
+    assert review.rating == 1
+    assert review.comment == "Refunded, but I stand by every word of this."
+
+
+def test_an_existing_review_opens_in_the_edit_form_prefilled(
+    client, review, customer, product
+):
+    client.force_login(customer)
+
+    response = client.get(write_url(product))
+
+    assert response.status_code == HTTPStatus.OK
+    content = response.content.decode()
+    assert "Edit your review" in content
+    assert "Save changes" in content
+    assert "Post review" not in content
+    assert response.context["form"].instance == review
+    assert review.comment in content
+
+
 # --- The product page --------------------------------------------------------
 
 
@@ -336,3 +404,60 @@ def test_anonymous_shoppers_and_staff_see_no_write_button(client, staff_user, pr
     assert (
         "Write a review" not in client.get(product.get_absolute_url()).content.decode()
     )
+
+
+def test_a_customer_who_reviewed_sees_the_edit_button(
+    client, review, customer, product
+):
+    client.force_login(customer)
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert "Edit your review" in content
+    assert "Write a review" not in content
+    assert write_url(product) in content
+
+
+def test_other_viewers_see_no_edit_button(client, review, other_customer, product):
+    assert (
+        "Edit your review"
+        not in client.get(product.get_absolute_url()).content.decode()
+    )
+    client.force_login(other_customer)
+    assert (
+        "Edit your review"
+        not in client.get(product.get_absolute_url()).content.decode()
+    )
+
+
+def test_edited_reviews_are_marked(client, review, product):
+    Review.objects.filter(pk=review.pk).update(
+        updated_at=review.created_at + timedelta(days=30)
+    )
+
+    assert "edited" in client.get(product.get_absolute_url()).content.decode()
+
+
+def test_unedited_reviews_are_not_marked(client, review, product):
+    assert "edited" not in client.get(product.get_absolute_url()).content.decode()
+
+
+def test_the_viewers_own_review_is_pinned_first(
+    client, review, customer, other_customer, product
+):
+    Review.objects.create(
+        user=other_customer,
+        product=product,
+        rating=2,
+        comment="Listened a little too well, honestly.",
+        created_at=review.created_at + timedelta(minutes=1),
+    )
+    client.force_login(customer)
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert content.index("Knew what I wanted") < content.index(
+        "Listened a little too well"
+    )
+    assert "Your review" in content
+    assert content.count("Knew what I wanted") == 1

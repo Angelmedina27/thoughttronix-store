@@ -16,6 +16,7 @@ from django.views.generic import DetailView, FormView, ListView, TemplateView
 
 from accounts.mixins import StaffRequiredMixin
 from products.models import Product
+from reviews.models import Review
 
 from .forms import CheckoutForm, OrderStatusForm
 from .models import Cart, CartItem, Order
@@ -207,11 +208,35 @@ class OrderHistoryView(OwnOrdersMixin, ListView):
 
 
 class OrderDetailView(OwnOrdersMixin, DetailView):
+    """One of the customer's orders, with review links on delivered lines.
+
+    The links need one query for the customer's reviewed products, never
+    one per line.
+    """
+
     template_name = "orders/order_detail.html"
     context_object_name = "order"
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related("items")
+        return super().get_queryset().prefetch_related("items__product")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        show_review_links = (
+            self.object.status == Order.Status.DELIVERED
+            and not self.request.user.is_staff
+        )
+        context["show_review_links"] = show_review_links
+        context["reviewed_product_ids"] = (
+            set(
+                Review.objects.filter(user=self.request.user).values_list(
+                    "product_id", flat=True
+                )
+            )
+            if show_review_links
+            else set()
+        )
+        return context
 
 
 # --- The back office --------------------------------------------------------

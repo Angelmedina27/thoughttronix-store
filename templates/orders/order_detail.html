@@ -33,6 +33,15 @@
               {% else %}
                 {{ item.product_name }}
               {% endif %}
+              {% if show_review_links and item.product %}
+                <div class="mt-1">
+                  {% if item.product_id in reviewed_product_ids %}
+                    <a href="{% url 'reviews:write' item.product.slug %}" class="link link-primary text-sm font-normal">Edit your review</a>
+                  {% else %}
+                    <a href="{% url 'reviews:write' item.product.slug %}" class="link link-primary text-sm font-normal">Review this product</a>
+                  {% endif %}
+                </div>
+              {% endif %}
             </td>
             <td>${{ item.unit_price|intcomma }}</td>
             <td>{{ item.quantity }}</td>

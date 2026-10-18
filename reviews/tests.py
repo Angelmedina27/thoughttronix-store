@@ -13,7 +13,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from conftest import make_order
-from orders.models import Order
+from orders.models import Order, OrderItem
 from products.models import Product
 
 from .forms import ReviewForm
@@ -647,3 +647,105 @@ def test_hidden_reviews_are_left_off_catalog_cards(client, review, product):
 
     assert "★" not in content
     assert "No reviews yet" in content
+
+
+# --- Review links on the order detail page -----------------------------------
+
+
+def order_url(order):
+    return reverse("orders:detail", kwargs={"pk": order.pk})
+
+
+def test_delivered_lines_link_to_write_or_edit_a_review(
+    client, delivered_order, customer, product, category
+):
+    other = Product.objects.create(
+        name="DreamWeaver", slug="dreamweaver", price=Decimal("99"), category=category
+    )
+    other_order = make_order(customer, other, Order.Status.DELIVERED)
+    Review.objects.create(user=customer, product=product, rating=4, comment="x" * 20)
+    client.force_login(customer)
+
+    reviewed = client.get(order_url(delivered_order)).content.decode()
+    unreviewed = client.get(order_url(other_order)).content.decode()
+
+    assert "Edit your review" in reviewed
+    assert "Review this product" not in reviewed
+    assert write_url(product) in reviewed
+    assert "Review this product" in unreviewed
+    assert "Edit your review" not in unreviewed
+    assert write_url(other) in unreviewed
+
+
+@pytest.mark.parametrize(
+    "status",
+    [Order.Status.PLACED, Order.Status.SHIPPED, Order.Status.CANCELLED],
+)
+def test_undelivered_order_lines_show_no_review_link(client, customer, product, status):
+    order = make_order(customer, product, status)
+    client.force_login(customer)
+
+    content = client.get(order_url(order)).content.decode()
+
+    assert "Review this product" not in content
+    assert "Edit your review" not in content
+    assert write_url(product) not in content
+
+
+def order_query_count(client, order):
+    with CaptureQueriesContext(connection) as queries:
+        client.get(order_url(order))
+    return len(queries)
+
+
+def test_the_order_page_query_count_does_not_grow_with_lines(
+    client, delivered_order, customer, category
+):
+    client.force_login(customer)
+    baseline = order_query_count(client, delivered_order)
+
+    for n in range(5):
+        extra = Product.objects.create(
+            name=f"Extra {n}", slug=f"extra-{n}", price=Decimal("10"), category=category
+        )
+        OrderItem.objects.create(
+            order=delivered_order,
+            product=extra,
+            product_name=extra.name,
+            unit_price=extra.price,
+            quantity=1,
+        )
+        if n % 2:
+            Review.objects.create(
+                user=customer, product=extra, rating=3, comment="x" * 20
+            )
+
+    content = client.get(order_url(delivered_order)).content.decode()
+    assert content.count("Review this product") == 4
+    assert content.count("Edit your review") == 2
+    assert order_query_count(client, delivered_order) == baseline
+
+
+def test_a_line_whose_product_was_deleted_shows_no_review_link(
+    client, delivered_order, customer, product
+):
+    product.delete()
+    client.force_login(customer)
+
+    content = client.get(order_url(delivered_order)).content.decode()
+
+    assert product.name in content
+    assert "Review this product" not in content
+    assert "Edit your review" not in content
+
+
+def test_staff_see_no_review_links_on_their_own_delivered_orders(
+    client, staff_user, product
+):
+    order = make_order(staff_user, product, Order.Status.DELIVERED)
+    client.force_login(staff_user)
+
+    content = client.get(order_url(order)).content.decode()
+
+    assert "Review this product" not in content
+    assert write_url(product) not in content

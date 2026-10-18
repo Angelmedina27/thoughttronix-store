@@ -28,6 +28,22 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 5: review links on the order detail page (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 5`
+2. I approve go ahead
+3. Go ahead i approve
+4. Move on to behavior 2
+5. Move on to behavior 3
+6. How can I manually verify this phase in the browser?
+7. Go ahead and update PROMPTS.md for this phase using the standard format
+
+### Summary
+- **Outcome:** Implemented Phase 5 of `plans/product-reviews.md` (user stories 10, and 16 on the order page) through the `implement` skill, which handed three behaviors to `tdd`. `OrderDetailView` now adds two entries to the page context. `show_review_links` is true only for a `DELIVERED` order viewed by someone who isn't staff. `reviewed_product_ids` is the set of products the customer has reviewed, loaded in one query and only when links will show. The queryset prefetches `items__product`, so each line's product and slug cost no extra queries. `templates/orders/order_detail.html` shows "Edit your review" or "Review this product" under each eligible line whose product still exists, linking to `reviews:write`. TDD behaviors: (1) delivered lines show the right label and link; (2) placed, shipped, and cancelled orders show no link (parametrized); (3) the page's query count stays the same when five more lines are added, two of them reviewed. Ordinary tests cover a line whose product was deleted and staff viewing their own delivered order. That makes six new tests (eight cases) in `reviews/tests.py`. The full suite passed (350), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden, and the user accepted the three behaviors as proposed. The "Review this product" link doesn't call `Review.objects.can_create` per line, because that would cost one query per line, which acceptance criterion 4 forbids. On a delivered order viewed by a non-staff customer with no review of the product, the outcome is identical, and the write URL still checks `can_create` when the link is followed. The assistant pointed this out after behavior 1, and the user did not object. Behaviors 2 and 3 passed on their first runs because behavior 1's code already covered them, so neither had a RED step. To show the tests could fail, the assistant temporarily removed the status check (all three status cases failed) and reverted the prefetch to `items` (the query test failed with `12 == 7`), restoring the code each time. The user asked for this entry before confirming the browser check that the `implement` skill asks for, so this log does not record a manual verification of the phase.
+- **Sideways:** At the start of behavior 2, `git diff` showed an uncommitted edit to `PROMPTS.md` that the assistant had not made: the Phase 4 entry gained "How can I manually verify this phase in the browser?" as prompt 8, and the next prompt was renumbered to 9. The assistant left it untouched, told the user, and it remains in the working tree alongside this entry.
+
 ## 2026-10-17 — Product Reviews Phase 4: ratings on catalog and category cards (TDD)
 
 ### Prompts
@@ -38,7 +54,8 @@ Each entry has this shape:
 5. Yes go ahead and make it pass
 6. Yes move on to behavior 3
 7. Yes keep it and move on with the phase
-8. Go ahead and update PROMPTS.md for this phase using the standard format.
+8. How can I manually verify this phase in the browser?
+9. Go ahead and update PROMPTS.md for this phase using the standard format.
 
 ### Summary
 - **Outcome:** Implemented Phase 4 of `plans/product-reviews.md` (user stories 1, 2) through the `implement` skill, which handed three behaviors to `tdd`. (1) `ProductQuerySet.with_ratings()` adds `average_rating` and `review_count` to each product from visible reviews only, using `Avg`/`Count` with a `Q(reviews__is_hidden=False)` filter in the same query as the products. The average is `None` when a product has no reviews. (2) Catalog cards show "★ 4.7 (3)" (`floatformat:1`, matching the product page) or "No reviews yet". (3) A query-count test checks that adding five tagged, reviewed products leaves the catalog's query count unchanged. `CatalogView` applies `with_ratings()`, and `CategoryView` inherits it. Ordinary tests cover category pages showing the same rating and hidden reviews being left off cards. Six new tests in all. The full suite passed (343), and `ruff check` and `ruff format` were clean. Nothing was committed.

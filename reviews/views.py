@@ -7,7 +7,7 @@ point defers to ``Review.objects.can_create`` for eligibility.
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.shortcuts import get_object_or_404, redirect
-from django.views.generic import UpdateView
+from django.views.generic import DeleteView, UpdateView
 
 from products.models import Product
 
@@ -60,3 +60,22 @@ class ReviewWriteView(UserPassesTestMixin, UpdateView):
         else:
             messages.success(self.request, "Thanks — your review is updated.")
         return redirect(self.product)
+
+
+class ReviewDeleteView(UserPassesTestMixin, DeleteView):
+    """Delete a review after a confirmation page, then return to its product.
+
+    Only the author may delete. Anonymous users are sent to sign in;
+    anyone else gets 403.
+    """
+
+    model = Review
+
+    def test_func(self):
+        return self.get_object().user == self.request.user
+
+    def form_valid(self, form):
+        product = self.object.product
+        self.object.delete()
+        messages.success(self.request, "Done — your review is deleted.")
+        return redirect(product)

@@ -28,6 +28,23 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 3: delete your review (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 3`
+2. Yes, I approve these two behaviors. Go ahead and write the tests.
+3. Yes I approve
+4. Yes, move on to behavior 2
+5. Yes I approve
+6. Yes continue with phase 3
+7. How can I manually verify this phase in the browser?
+8. Yes everything passes
+
+### Summary
+- **Outcome:** Implemented Phase 3 of `plans/product-reviews.md` (user stories 19, 20) through the `implement` skill, which delegated two behaviors to `tdd`. (1) Confirming a delete removes the review and redirects to the product page with "Done — your review is deleted." (2) Someone else's review returns 403 on both GET and POST and the review survives. Each was shown RED on an assertion and approved before the code was written. `ReviewDeleteView` (`DeleteView` + `UserPassesTestMixin`, ownership as the test) lives at `/reviews/<pk>/delete/` (`reviews:delete`). The URL is pk-keyed rather than slug-keyed so "someone else's review" is expressible, and non-owners get 403 rather than a 404 from a filtered queryset. Anonymous users are sent to sign in. A new `review_confirm_delete.html` shows the review's stars and comment with "Keep my review" and "Delete review" buttons. The author's pinned review card gained a Delete link. Normal tests cover the confirmation page, the anonymous redirect, an unknown pk (404), the Delete link appearing only for the author, and writing a fresh review after deleting (the product page flips back to "Write a review"). `ruff` is clean, the full suite is green, and the user verified the phase in the browser. Nothing was committed.
+- **Deviations:** No recommendation was overridden. The assistant proposed only two TDD behaviors instead of three, because "write again after deleting" was already handled by `can_create` and would have passed on its first run; it got a normal test instead. Blocking deletion of *hidden* reviews was left to Phase 7, where the plan puts it, so a hidden review is still deletable by its author until then (it isn't shown to them, so there's no link). This entry was written as step 5 of the `implement` skill rather than after the file's standard prompt. Prompt 7 was a follow-up asking how to verify the phase by hand.
+- **Sideways:** Behavior 1 first failed with `NoReverseMatch`, so a URL and a placeholder view were added before RED. Behavior 2's GET case first failed with `TemplateDoesNotExist`, so the real confirmation template was written as scaffolding before RED. Editing `reviews/views.py` with a Python script on Windows wrote it as cp1252, turning the new em dash into an invalid byte and breaking 25 tests with a `SyntaxError` on import; the byte was rewritten as UTF-8 and the diff confirmed no other text changed. The full suite ran in the background (several minutes on this machine). The assistant did not open the pages in a browser itself; the user did.
+
 ## 2026-10-17 — Product Reviews Phase 2: edit your review (TDD)
 
 ### Prompts

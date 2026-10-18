@@ -461,3 +461,106 @@ def test_the_viewers_own_review_is_pinned_first(
     )
     assert "Your review" in content
     assert content.count("Knew what I wanted") == 1
+
+
+# --- Deleting a review -------------------------------------------------------
+
+
+def delete_url(review):
+    return reverse("reviews:delete", kwargs={"pk": review.pk})
+
+
+def test_confirming_a_delete_removes_the_review_and_returns_to_the_product(
+    client, review, customer, product
+):
+    client.force_login(customer)
+
+    response = client.post(delete_url(review), follow=True)
+
+    assert response.redirect_chain == [(product.get_absolute_url(), HTTPStatus.FOUND)]
+    assert "your review is deleted" in response.content.decode()
+    assert not Review.objects.exists()
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_deleting_someone_elses_review_is_forbidden(
+    client, review, other_customer, method
+):
+    client.force_login(other_customer)
+
+    response = getattr(client, method)(delete_url(review))
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert Review.objects.filter(pk=review.pk).exists()
+
+
+def test_the_owner_sees_a_confirmation_page(client, review, customer, product):
+    client.force_login(customer)
+
+    response = client.get(delete_url(review))
+
+    assert response.status_code == HTTPStatus.OK
+    content = response.content.decode()
+    assert f"Delete your review of {product.name}?" in content
+    assert review.comment in content
+    assert Review.objects.filter(pk=review.pk).exists()
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_anonymous_users_are_sent_to_sign_in_to_delete(client, review, method):
+    response = getattr(client, method)(delete_url(review))
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url.startswith(reverse("accounts:login"))
+    assert Review.objects.filter(pk=review.pk).exists()
+
+
+def test_an_unknown_review_is_404(client, customer):
+    client.force_login(customer)
+
+    response = client.get(reverse("reviews:delete", kwargs={"pk": 999}))
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_after_deleting_the_customer_can_write_a_new_review(
+    client, review, customer, product
+):
+    client.force_login(customer)
+    client.post(delete_url(review))
+
+    content = client.get(product.get_absolute_url()).content.decode()
+    assert "Write a review" in content
+    assert "Edit your review" not in content
+
+    response = client.post(
+        write_url(product),
+        {"rating": "3", "comment": "Second thoughts, fully my own this time."},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    new_review = Review.objects.get()
+    assert new_review.pk != review.pk
+    assert new_review.rating == 3
+
+
+def test_the_author_sees_a_delete_link_on_their_review(
+    client, review, customer, product
+):
+    client.force_login(customer)
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert delete_url(review) in content
+
+
+def test_other_viewers_see_no_delete_link(client, review, other_customer, product):
+    assert (
+        delete_url(review)
+        not in client.get(product.get_absolute_url()).content.decode()
+    )
+    client.force_login(other_customer)
+    assert (
+        delete_url(review)
+        not in client.get(product.get_absolute_url()).content.decode()
+    )

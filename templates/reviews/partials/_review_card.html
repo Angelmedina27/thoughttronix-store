@@ -11,9 +11,14 @@
       </span>
     </div>
     <p>{{ review.comment|linebreaksbr }}</p>
-    <p class="text-sm opacity-70">
-      — {{ review.user.username }}
-      <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
-    </p>
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm opacity-70">
+        — {{ review.user.username }}
+        <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
+      </p>
+      {% if own %}
+        <a href="{% url 'reviews:delete' review.pk %}" class="btn btn-ghost btn-xs text-error">Delete</a>
+      {% endif %}
+    </div>
   </div>
 </li>

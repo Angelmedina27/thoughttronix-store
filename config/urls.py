@@ -16,6 +16,7 @@ urlpatterns = [
     path("", include("orders.urls")),
     path("", include("products.urls")),
     path("", include("coupons.urls")),
+    path("", include("reviews.urls")),
 ]
 
 # Uploaded media in development; static() is a no-op when DEBUG is off.

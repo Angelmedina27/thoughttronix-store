@@ -1,0 +1,48 @@
+{# The product page's reviews section: summary, write button, and list. #}
+<section id="reviews" class="mt-12">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Customer reviews</h2>
+      {% if rating_summary.count %}
+        <p class="mt-1 flex items-center gap-2">
+          <span class="text-xl font-semibold text-warning">★ {{ rating_summary.average|floatformat:1 }}</span>
+          <span class="opacity-70">
+            based on {{ rating_summary.count }} review{{ rating_summary.count|pluralize }}
+          </span>
+        </p>
+      {% endif %}
+    </div>
+    {% if can_review %}
+      <a href="{% url 'reviews:write' product.slug %}" class="btn btn-primary btn-sm">Write a review</a>
+    {% endif %}
+  </div>
+
+  {% if reviews %}
+    <ul class="mt-6 space-y-4">
+      {% for review in reviews %}
+        <li class="card bg-base-100 shadow-md">
+          <div class="card-body gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              {% include "reviews/partials/_stars.html" with rating=review.rating %}
+              <span class="text-sm opacity-60">{{ review.created_at|date:"M j, Y" }}</span>
+            </div>
+            <p>{{ review.comment|linebreaksbr }}</p>
+            <p class="text-sm opacity-70">
+              — {{ review.user.username }}
+              <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
+            </p>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="mt-6 rounded-box bg-base-100 py-12 text-center shadow-md">
+      <p class="text-5xl">💭</p>
+      <p class="mt-4 text-xl font-semibold">No reviews yet</p>
+      <p class="mx-auto mt-2 max-w-md opacity-70">
+        Reviews come only from customers whose orders were delivered.
+        Nobody has shared their thoughts on {{ product.name }} yet — though we may already know them.
+      </p>
+    </div>
+  {% endif %}
+</section>

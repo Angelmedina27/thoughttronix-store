@@ -14,8 +14,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from coupons.models import Coupon
-from orders.models import Cart, CartItem
+from orders.models import Cart, CartItem, Order, OrderItem
 from products.models import Category, Product, Tag
+from reviews.models import Review
 
 
 @pytest.fixture(autouse=True)
@@ -120,3 +121,49 @@ def coupon(db):
 def product_coupon(product):
     """A coupon tied to the ``product`` fixture."""
     return Coupon.objects.create(code="SERAPHINE15", percent_off=15, product=product)
+
+
+def make_order(user, product, status=Order.Status.PLACED):
+    """An order of one ``product`` for ``user``, built directly at ``status``."""
+    order = Order.objects.create(
+        user=user,
+        status=status,
+        total=product.price,
+        email=f"{user.username}@example.com",
+        shipping_name="Ada Lovelace",
+        shipping_street="1 Analytical Way",
+        shipping_city="Canyon",
+        shipping_state="TX",
+        shipping_zip="79015",
+        billing_name="Ada Lovelace",
+        billing_street="1 Analytical Way",
+        billing_city="Canyon",
+        billing_state="TX",
+        billing_zip="79015",
+        card_last4="4242",
+    )
+    OrderItem.objects.create(
+        order=order,
+        product=product,
+        product_name=product.name,
+        unit_price=product.price,
+        quantity=1,
+    )
+    return order
+
+
+@pytest.fixture
+def delivered_order(customer, product):
+    """The ``customer``'s delivered order of ``product`` — review-eligible."""
+    return make_order(customer, product, Order.Status.DELIVERED)
+
+
+@pytest.fixture
+def review(delivered_order, customer, product):
+    """The ``customer``'s visible review of ``product``."""
+    return Review.objects.create(
+        user=customer,
+        product=product,
+        rating=4,
+        comment="Knew what I wanted before I did. Mostly delightful.",
+    )

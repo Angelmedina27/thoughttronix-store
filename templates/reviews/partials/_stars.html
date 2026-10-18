@@ -1,0 +1,4 @@
+{# A read-only 1–5 star rating; pass ``rating``. #}
+<span class="whitespace-nowrap text-lg leading-none" aria-label="{{ rating }} out of 5 stars" title="{{ rating }} out of 5 stars">
+  {% for star in "12345" %}<span class="{% if forloop.counter <= rating %}text-warning{% else %}opacity-25{% endif %}" aria-hidden="true">★</span>{% endfor %}
+</span>

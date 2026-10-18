@@ -29,6 +29,11 @@ A server-rendered Django 6 storefront and back office. The PRD (`prd/core-platfo
   DEBUG only). `seed` wipes `media/products/`; tests redirect `MEDIA_ROOT` to
   a temp dir via an autouse fixture.
 - `orders/` — cart, checkout, orders, and back-office order management
+- `reviews/` — customer product reviews (`Review`: one per customer per
+  product, 1–5 stars plus a comment). `Review.objects.can_create(user,
+  product)` is the single eligibility rule (signed in, not staff, a
+  `DELIVERED` order line, no existing review), checked only at creation;
+  shopper-facing listings, averages, and counts use `.visible()`.
 - `dashboard/` — the staff analytics dashboard
 - `PROMPTS.md` — the AI-usage log; append entries, never rewrite history
 - `templates/` — project-level templates (`base.html`); app templates live in

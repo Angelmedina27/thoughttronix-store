@@ -12,6 +12,7 @@ from django.views.generic import (
 )
 
 from accounts.mixins import StaffRequiredMixin
+from reviews.models import Review
 
 from .forms import CategoryForm, ProductForm, TagForm
 from .models import Category, Product, Tag
@@ -69,6 +70,16 @@ class ProductDetailView(DetailView):
     template_name = "products/detail.html"
     context_object_name = "product"
     queryset = Product.objects.select_related("category").prefetch_related("tags")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        reviews = self.object.reviews.visible()
+        context["reviews"] = reviews.select_related("user")
+        context["rating_summary"] = reviews.rating_summary()
+        context["can_review"] = Review.objects.can_create(
+            self.request.user, self.object
+        )
+        return context
 
 
 # --- The back office --------------------------------------------------------

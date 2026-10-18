@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ product.name }} — The ThoughtTronix Store{% endblock %}
+
+{% block content %}
+  <div class="breadcrumbs mb-6 text-sm">
+    <ul>
+      <li><a href="{% url 'products:catalog' %}">Catalog</a></li>
+      <li><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></li>
+      <li>Write a review</li>
+    </ul>
+  </div>
+
+  <div class="mx-auto max-w-2xl">
+    <h1 class="text-3xl font-bold">Review {{ product.name }}</h1>
+    <p class="mt-1 opacity-70">Tell other shoppers how it went. Your review goes live right away.</p>
+
+    <form method="post" class="card mt-6 bg-base-100 shadow-md">
+      {% csrf_token %}
+      <div class="card-body gap-6">
+        <fieldset>
+          <legend class="label mb-2">Your rating</legend>
+          <div class="rating rating-lg">
+            {% for radio in form.rating %}
+              <input type="radio"
+                     name="{{ form.rating.html_name }}"
+                     value="{{ radio.data.value }}"
+                     class="mask mask-star-2 bg-warning"
+                     aria-label="{{ radio.choice_label }}"
+                     {% if radio.data.selected %}checked{% endif %}
+                     {% if forloop.first %}required{% endif %} />
+            {% endfor %}
+          </div>
+          {% for error in form.rating.errors %}
+            <p class="mt-1 text-sm text-error">{{ error }}</p>
+          {% endfor %}
+        </fieldset>
+
+        {% include "products/partials/_field.html" with field=form.comment %}
+
+        <div class="flex justify-end gap-2">
+          <a href="{{ product.get_absolute_url }}" class="btn btn-ghost">Cancel</a>
+          <button type="submit" class="btn btn-primary">Post review</button>
+        </div>
+      </div>
+    </form>
+  </div>
+{% endblock %}

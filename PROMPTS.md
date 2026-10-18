@@ -28,6 +28,29 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 6: back-office Reviews tab and product-delete warning (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 6`
+2. I approve go ahead
+3. I approve go ahead
+4. Go ahead I approve
+5. I approve
+6. Go ahead
+7. How can I manually verify this phase in the browser?
+8. Update PROMPTS.md with the standard prompt.
+
+### Summary
+- **Outcome:** Implemented Phase 6 of `plans/product-reviews.md` (user stories 22, 23, 24, and 29) through the `implement` skill, which handed three behaviors to `tdd`. The staff tab rail in `templates/backoffice/base.html` gains a **Reviews** tab between Orders and Dashboard.
+  - **Staff list:** `ManageReviewListView` in `reviews/views.py`, behind `StaffRequiredMixin`, serves `reviews:manage_reviews` at `/backoffice/reviews/` with `section = "reviews"`. It lists every review, hidden ones included, newest first, with `select_related("user", "product")`. `?hidden=1` narrows the list through a new `ReviewQuerySet.hidden()`, the counterpart of `visible()`.
+  - **Templates:** each row (product link, author, stars, comment, date with an "edited" note, Hidden/Visible badge) is its own partial, `templates/reviews/partials/_review_row.html`, ready for Phase 7's HTMX toggle. `templates/reviews/manage_reviews.html` has "all / hidden only" filter badges like the Orders status filter, plus two designed empty states: "No reviews yet" and "No hidden reviews".
+  - **Delete warning:** the product delete confirmation reads `product.reviews.count`, which includes hidden reviews because the cascade deletes them too. It warns "Its N reviews will be deleted too" and suggests marking the product unavailable instead.
+  - **TDD behaviors:** (1) the list shows every review, hidden included, newest first; (2) the hidden filter shows only hidden reviews; (3) the delete confirmation counts hidden reviews ("2 reviews" for one visible plus one hidden). Each behavior had a RED step that failed on an assertion before its code was written.
+  - **Other tests:** anonymous users are sent to sign in, customers get 403, the Reviews tab is highlighted, and both empty states render. That makes seven tests in the new `reviews/test_backoffice.py` and one in `products/test_backoffice.py`.
+  - **Checks:** the full suite passed (358), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden, and the user accepted the three behaviors and each RED test as proposed. The assistant gave the browser verification steps once the feedback loops passed. The user then asked for them again (prompt 7), and the assistant restated them in more detail. Because the seed has no reviews until Phase 9, those steps have the tester write reviews as `customer` and hide one through `/admin/`. The user asked for this entry before confirming the browser check that the `implement` skill asks for, so this log does not record a manual verification of the phase.
+- **Sideways:** The first version of the tab-highlight test matched the tab's exact HTML whitespace. The assistant's script that wrote it turned the escaped `\n` into a real newline, which broke the f-string (`SyntaxError: unterminated f-string literal`). The assistant replaced it with a whitespace-tolerant `re.search`, which also removed the dependency on template indentation. The first `ruff check` flagged import order in `reviews/views.py` (an extra blank line between first-party imports), and `ruff check --fix` corrected it.
+
 ## 2026-10-17 — Product Reviews Phase 5: review links on the order detail page (TDD)
 
 ### Prompts

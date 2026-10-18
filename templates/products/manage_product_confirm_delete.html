@@ -10,6 +10,18 @@
         This removes the product from the store permanently. Past orders keep
         their purchase-time copy of its name and price.
       </p>
+      {# Every review cascades with the product, hidden ones included. #}
+      {% with review_count=product.reviews.count %}
+        {% if review_count %}
+          <div role="alert" class="alert alert-warning alert-soft mt-2">
+            <span>
+              Its <strong>{{ review_count }} review{{ review_count|pluralize }}</strong>
+              will be deleted too. To keep {{ review_count|pluralize:"it,them" }}, mark the
+              product unavailable instead.
+            </span>
+          </div>
+        {% endif %}
+      {% endwith %}
       <form method="post" class="mt-4 flex justify-end gap-2">
         {% csrf_token %}
         <a href="{% url 'products:manage_products' %}" class="btn btn-ghost">Cancel</a>

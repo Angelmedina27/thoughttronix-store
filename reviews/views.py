@@ -7,8 +7,9 @@ point defers to ``Review.objects.can_create`` for eligibility.
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.shortcuts import get_object_or_404, redirect
-from django.views.generic import DeleteView, UpdateView
+from django.views.generic import DeleteView, ListView, UpdateView
 
+from accounts.mixins import StaffRequiredMixin
 from products.models import Product
 
 from .forms import ReviewForm
@@ -79,3 +80,35 @@ class ReviewDeleteView(UserPassesTestMixin, DeleteView):
         self.object.delete()
         messages.success(self.request, "Done — your review is deleted.")
         return redirect(product)
+
+
+# --- Back office ---------------------------------------------------------------
+# Staff moderate reviews; they never write or edit them. URLs use pks per the
+# URL conventions, and ``section`` drives the active tab in the staff shell.
+
+
+class ManageReviewListView(StaffRequiredMixin, ListView):
+    """Every review, hidden ones included, newest first.
+
+    ``?hidden=1`` narrows the list to hidden reviews, so staff can revisit
+    past moderation decisions.
+    """
+
+    template_name = "reviews/manage_reviews.html"
+    context_object_name = "reviews"
+    extra_context = {"section": "reviews"}
+
+    def get_queryset(self):
+        reviews = Review.objects.select_related("user", "product")
+        if self.hidden_only:
+            reviews = reviews.hidden()
+        return reviews
+
+    @property
+    def hidden_only(self):
+        return self.request.GET.get("hidden") == "1"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["hidden_only"] = self.hidden_only
+        return context

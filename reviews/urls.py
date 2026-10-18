@@ -15,4 +15,9 @@ urlpatterns = [
         views.ReviewDeleteView.as_view(),
         name="delete",
     ),
+    path(
+        "backoffice/reviews/",
+        views.ManageReviewListView.as_view(),
+        name="manage_reviews",
+    ),
 ]

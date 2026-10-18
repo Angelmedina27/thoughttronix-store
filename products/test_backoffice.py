@@ -4,11 +4,14 @@ from decimal import Decimal
 from http import HTTPStatus
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.templatetags.static import static
 from django.urls import reverse
 
-from conftest import png_bytes
+from conftest import make_order, png_bytes
+from orders.models import Order
+from reviews.models import Review
 
 from .models import Category, Product, Tag
 
@@ -136,6 +139,28 @@ def test_staff_can_delete_a_product(client, staff_user, product):
 
     assert response.url == reverse("products:manage_products")
     assert not Product.objects.exists()
+
+
+def test_delete_confirmation_counts_the_reviews_it_will_delete(
+    client, staff_user, product, review
+):
+    """Hidden reviews count too — the cascade deletes them all."""
+    author = get_user_model().objects.create_user(username="grumpy", password="x")
+    make_order(author, product, Order.Status.DELIVERED)
+    Review.objects.create(
+        user=author,
+        product=product,
+        rating=1,
+        comment="It read my mind and told my mother. Never again.",
+        is_hidden=True,
+    )
+    client.force_login(staff_user)
+
+    response = client.get(
+        reverse("products:manage_product_delete", kwargs={"pk": product.pk})
+    )
+
+    assert "2 reviews" in response.content.decode()
 
 
 def test_manage_list_shows_unavailable_products(

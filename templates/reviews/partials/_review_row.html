@@ -1,0 +1,21 @@
+{# One row of the back-office review list; pass ``review``. #}
+<tr>
+  <td>
+    <a href="{{ review.product.get_absolute_url }}" class="link-hover font-semibold">{{ review.product.name }}</a>
+  </td>
+  <td>{{ review.user.username }}</td>
+  <td>{% include "reviews/partials/_stars.html" with rating=review.rating %}</td>
+  <td class="max-w-md">
+    <p class="line-clamp-3">{{ review.comment }}</p>
+  </td>
+  <td class="whitespace-nowrap">
+    {{ review.created_at|date:"M j, Y" }}{% if review.edited %}<span class="block text-xs opacity-60">edited</span>{% endif %}
+  </td>
+  <td>
+    {% if review.is_hidden %}
+      <span class="badge badge-warning badge-outline">Hidden</span>
+    {% else %}
+      <span class="badge badge-success badge-outline">Visible</span>
+    {% endif %}
+  </td>
+</tr>

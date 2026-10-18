@@ -17,6 +17,10 @@ class ReviewQuerySet(models.QuerySet):
         """Reviews shoppers may see — every listing, average, and count."""
         return self.filter(is_hidden=False)
 
+    def hidden(self):
+        """Reviews staff have hidden — the back office's moderation filter."""
+        return self.filter(is_hidden=True)
+
     def rating_summary(self):
         """The average rating and review count, as ``{"average", "count"}``.
 

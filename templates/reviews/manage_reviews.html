@@ -1,0 +1,61 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}Reviews — Back office{% endblock %}
+
+{% block backoffice %}
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
+    <h2 class="text-xl font-semibold">
+      {{ reviews|length }} {% if hidden_only %}hidden {% endif %}review{{ reviews|length|pluralize }}
+    </h2>
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="opacity-60">Show:</span>
+      <a href="{% querystring hidden=None %}"
+         class="badge {% if not hidden_only %}badge-primary{% else %}badge-ghost{% endif %}">
+        all
+      </a>
+      <a href="{% querystring hidden=1 %}"
+         class="badge {% if hidden_only %}badge-primary{% else %}badge-ghost{% endif %}">
+        hidden only
+      </a>
+    </div>
+  </div>
+
+  {% if reviews %}
+    <div class="overflow-x-auto rounded-box bg-base-100 shadow-md">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Author</th>
+            <th>Rating</th>
+            <th>Comment</th>
+            <th>Posted</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for review in reviews %}
+            {% include "reviews/partials/_review_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="py-16 text-center">
+      {% if hidden_only %}
+        <p class="text-5xl">🙈</p>
+        <p class="mt-4 text-xl font-semibold">No hidden reviews</p>
+        <p class="mt-2 opacity-70">Every opinion is on display. Nothing has needed curating.</p>
+        <a href="{% querystring hidden=None %}" class="btn btn-primary btn-sm mt-6">
+          Show all reviews
+        </a>
+      {% else %}
+        <p class="text-5xl">💬</p>
+        <p class="mt-4 text-xl font-semibold">No reviews yet</p>
+        <p class="mt-2 opacity-70">
+          Once a delivered customer shares their thoughts, they'll land here first.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

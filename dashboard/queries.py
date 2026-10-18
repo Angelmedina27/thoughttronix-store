@@ -1,19 +1,21 @@
-"""Dashboard aggregations — the second of the codebase's two deep modules.
+"""Dashboard aggregations — one of the codebase's three deep modules.
 
-The interface is the product: five functions that answer the questions
+The interface is the product: seven functions that answer the questions
 leadership actually asks. Every one takes an optional ``since`` cutoff
-(``None`` means all time) and excludes cancelled orders — cancelled
-revenue is money the store never keeps.
+(``None`` means all time). The sales functions exclude cancelled orders —
+cancelled revenue is money the store never keeps — and the review
+functions exclude hidden reviews, so moderated spam can't skew the numbers.
 """
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from django.db.models import DateField, DecimalField, F, QuerySet, Sum
+from django.db.models import Avg, DateField, DecimalField, F, QuerySet, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
+from reviews.models import Review
 
 ZERO = Decimal("0.00")
 
@@ -103,6 +105,27 @@ def top_products(since: datetime | None = None, *, limit: int = 5) -> list[dict]
         )
         .order_by("-revenue")[:limit]
     )
+
+
+def _visible_reviews(since: datetime | None) -> QuerySet[Review]:
+    """Reviews shoppers can see, posted at or after ``since``."""
+    reviews = Review.objects.visible()
+    if since is not None:
+        reviews = reviews.filter(created_at__gte=since)
+    return reviews
+
+
+def average_rating(since: datetime | None = None) -> float | None:
+    """Mean star rating of visible reviews posted at or after ``since``.
+
+    ``None`` when there are no such reviews — no reviews is not zero stars.
+    """
+    return _visible_reviews(since).aggregate(average=Avg("rating"))["average"]
+
+
+def review_count(since: datetime | None = None) -> int:
+    """Number of visible reviews posted at or after ``since``."""
+    return _visible_reviews(since).count()
 
 
 def _floor(day: date, bucket: str) -> date:

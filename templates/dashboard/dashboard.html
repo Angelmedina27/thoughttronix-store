@@ -36,6 +36,24 @@
       </div>
     </div>
 
+    <div class="stats stats-vertical mb-8 w-full bg-base-100 shadow-md sm:stats-horizontal">
+      <div class="stat">
+        <div class="stat-title">Average rating</div>
+        {% if average_rating is not None %}
+          <div class="stat-value text-warning">{{ average_rating|floatformat:1 }} / 5</div>
+          <div class="stat-desc">from {{ review_count|intcomma }} visible review{{ review_count|pluralize }}</div>
+        {% else %}
+          <div class="stat-value opacity-40">—</div>
+          <div class="stat-desc">No reviews in this period</div>
+        {% endif %}
+      </div>
+      <div class="stat">
+        <div class="stat-title">Reviews posted</div>
+        <div class="stat-value">{{ review_count|intcomma }}</div>
+        <div class="stat-desc">{{ period_label|lower }}, excluding hidden reviews</div>
+      </div>
+    </div>
+
     <div class="grid items-start gap-8 lg:grid-cols-5">
       <div class="card bg-base-100 shadow-md lg:col-span-3">
         <div class="card-body">

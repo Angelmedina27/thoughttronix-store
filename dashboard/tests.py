@@ -7,12 +7,15 @@ expected numbers fit in a code review.
 from datetime import timedelta
 from decimal import Decimal
 from http import HTTPStatus
+from itertools import count
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
+from reviews.models import Review
 
 from . import queries
 
@@ -52,6 +55,26 @@ def add_item(order, name, unit_price, quantity=1):
         product_name=name,
         unit_price=Decimal(unit_price),
         quantity=quantity,
+    )
+
+
+_reviewers = count()
+
+
+def make_review(product, rating, *, days_ago=0, hidden=False):
+    """One review of ``product`` by a fresh customer, backdated like orders.
+
+    Created directly: the dashboard counts reviews, it doesn't vet them.
+    """
+    return Review.objects.create(
+        user=get_user_model().objects.create_user(
+            username=f"reviewer{next(_reviewers)}"
+        ),
+        product=product,
+        rating=rating,
+        comment="An honest opinion, at least twenty characters.",
+        is_hidden=hidden,
+        created_at=timezone.now() - timedelta(days=days_ago) + timedelta(seconds=5),
     )
 
 
@@ -201,6 +224,33 @@ def test_top_products_respect_limit_cancellation_and_period(customer):
     assert [entry["product_name"] for entry in top] == ["Pulse Halo", "Whisper"]
 
 
+# --- Reviews -------------------------------------------------------------------
+
+
+def test_average_rating_counts_visible_reviews_in_the_period(product):
+    assert queries.average_rating() is None
+
+    make_review(product, 5)
+    make_review(product, 4)
+    make_review(product, 1, hidden=True)
+    make_review(product, 1, days_ago=60)
+
+    assert queries.average_rating(since(30)) == 4.5
+    assert queries.average_rating() == pytest.approx(10 / 3)
+
+
+def test_review_count_counts_visible_reviews_in_the_period(product):
+    assert queries.review_count() == 0
+
+    make_review(product, 5)
+    make_review(product, 2)
+    make_review(product, 1, hidden=True)
+    make_review(product, 4, days_ago=60)
+
+    assert queries.review_count(since(30)) == 2
+    assert queries.review_count() == 3
+
+
 # --- The view ------------------------------------------------------------------
 
 
@@ -258,6 +308,24 @@ def test_an_unknown_period_falls_back_to_30_days(client, staff_user, customer):
     ).content.decode()
 
     assert "$0.00" in page
+
+
+def test_review_tiles_follow_the_period(client, staff_user, customer, product):
+    make_order(customer, "100.00")
+    make_review(product, 5, days_ago=60)
+    make_review(product, 4, days_ago=60)
+    client.force_login(staff_user)
+
+    default = client.get(reverse("dashboard:index")).content.decode()
+    all_time = client.get(
+        reverse("dashboard:index"), {"period": "all"}
+    ).content.decode()
+
+    assert "Average rating" in default
+    assert "No reviews in this period" in default
+    assert "4.5 / 5" not in default
+    assert "4.5 / 5" in all_time
+    assert "from 2 visible reviews" in all_time
 
 
 def test_the_dashboard_has_a_designed_empty_state(client, staff_user):

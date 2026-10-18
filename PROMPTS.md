@@ -28,6 +28,28 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 8: dashboard review tiles (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 8`
+2. Yes I approve those three
+3. Yes keep it as a float, I approve
+4. move onto cycle 2
+5. Yes write the code to make it pass
+6. Move onto cycle 3
+7. Write the code to make it pass
+8. How can I manually verify this phase in the browser?
+9. Update PROMPTS.md with the standard prompt for completing Phase 8
+
+### Summary
+- **Outcome:** Implemented Phase 8 of `plans/product-reviews.md` (user stories 30 and 31) through the `implement` skill, which handed three behaviors to `tdd`.
+  - **Queries:** `dashboard/queries.py` gains a private `_visible_reviews(since)`, built on `Review.objects.visible()` with the `since` cutoff and mirroring `_sold(since)`. Two public functions sit on top of it, each with a docstring and type hints: `average_rating(since) -> float | None` (Django's `Avg`, which is `None` with no reviews) and `review_count(since) -> int`. The module docstring now says seven functions and one of three deep modules, and that review functions exclude hidden reviews while sales functions exclude cancelled orders.
+  - **Tiles:** `DashboardView` passes both values for the selected period. `dashboard.html` adds a second stats row: **Average rating** ("4.5 / 5", "from N visible review(s)", or "—" with "No reviews in this period") and **Reviews posted** (the count, with "<period>, excluding hidden reviews"). The row sits inside the existing `store_has_sales` branch; reviews require a delivered order, so a store with reviews always has sales.
+  - **TDD behaviors:** (1) `average_rating` is `None` when empty, excludes hidden reviews, and respects `since` (4.5 over 30 days, 10/3 over all time); (2) `review_count` is 0 when empty, excludes hidden reviews, and respects `since` (2 vs 3); (3) the tiles follow the period, so 60-day-old reviews show the placeholder under the default 30 days and "4.5 / 5 … from 2 visible reviews" under All time. A `make_review` helper in `dashboard/tests.py` creates each review with a fresh customer and backdates it like `make_order`. Each test failed on an assertion before its code was written. Cycles 1 and 2 needed a stub function first, because the first run of cycle 1 failed with `AttributeError`.
+  - **Checks:** the full suite passed (377), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden. The user accepted the three behaviors and each RED test as proposed. In cycle 1 the assistant asked whether the average should be a raw `float` or a rounded `Decimal` like `average_order_value`, and the user chose the `float`. The user asked for the browser verification steps again (prompt 8). The assistant gave a fuller walkthrough with the seeded logins, the customer's delivered MindSync/SyncRest order, expected numbers (3.5 / 5, then 5.0 / 5 after hiding), and a `manage.py shell` one-liner to backdate a review for the period check. The user asked for this entry before confirming the browser check, so this log records no manual verification of the phase.
+- **Sideways:** The assistant's first edit to `dashboard/tests.py` inserted a stray `PLACEHOLDER_MARK` line in the wrong spot. It was reverted in the next edit, before any test ran. The first run of cycle 1 failed with `AttributeError` instead of an assertion; the assistant called it scaffolding, not RED, added a `None`-returning stub, and folded the empty-store `None` check into the test before showing it for approval. The full suite took about 4.5 minutes.
+
 ## 2026-10-17 — Product Reviews Phase 7: hide / unhide moderation (TDD)
 
 ### Prompts

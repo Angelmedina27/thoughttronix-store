@@ -30,7 +30,13 @@ class CatalogView(ListView):
     paginate_by = 12
 
     def get_queryset(self):
-        products = Product.objects.select_related("category").prefetch_related("tags")
+        # Aggregate annotations drop Meta.ordering, so the pages need it restated.
+        products = (
+            Product.objects.with_ratings()
+            .select_related("category")
+            .prefetch_related("tags")
+            .order_by("name")
+        )
         query = self.request.GET.get("q", "").strip()
         if query:
             products = products.search(query)

@@ -28,6 +28,23 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 4: ratings on catalog and category cards (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 4`
+2. Yes go ahead with those three
+3. Go ahead and make it pass yes
+4. Yes move on to behavior 2
+5. Yes go ahead and make it pass
+6. Yes move on to behavior 3
+7. Yes keep it and move on with the phase
+8. Go ahead and update PROMPTS.md for this phase using the standard format.
+
+### Summary
+- **Outcome:** Implemented Phase 4 of `plans/product-reviews.md` (user stories 1, 2) through the `implement` skill, which handed three behaviors to `tdd`. (1) `ProductQuerySet.with_ratings()` adds `average_rating` and `review_count` to each product from visible reviews only, using `Avg`/`Count` with a `Q(reviews__is_hidden=False)` filter in the same query as the products. The average is `None` when a product has no reviews. (2) Catalog cards show "★ 4.7 (3)" (`floatformat:1`, matching the product page) or "No reviews yet". (3) A query-count test checks that adding five tagged, reviewed products leaves the catalog's query count unchanged. `CatalogView` applies `with_ratings()`, and `CategoryView` inherits it. Ordinary tests cover category pages showing the same rating and hidden reviews being left off cards. Six new tests in all. The full suite passed (343), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden, and the user asked no follow-up questions. Behavior 3 passed on its first run: the single-query annotation from behavior 1 already kept the count flat, so it never had a RED step. To show the test could fail, the assistant temporarily switched the card to `product.reviews.count`. The test then failed with `11 == 6`, and the template was restored. The user chose to keep it as a regression guard. The user asked for this entry before confirming the browser check that the `implement` skill asks for, so this log does not record a manual verification of the phase.
+- **Sideways:** Behavior 1 needed a placeholder `with_ratings()` that returned constant `None`/0 so that RED failed on an assertion rather than an `AttributeError`. The first version of the card split the rating and the count into separate spans, so the literal "★ 4.7 (3)" never appeared in the page. They were merged into one span before the test passed. That test then raised `UnorderedObjectListWarning`: aggregate annotations stop Django from applying `Meta.ordering`, so pagination would have had no stable order. The fix was an explicit `.order_by("name")` in `CatalogView`, with a comment. A combined test run went past the 2-minute tool timeout and finished in the background (it passed).
+
 ## 2026-10-17 — Product Reviews Phase 3: delete your review (TDD)
 
 ### Prompts

@@ -62,6 +62,18 @@ class ProductQuerySet(models.QuerySet):
             models.Q(name__icontains=text) | models.Q(description__icontains=text)
         )
 
+    def with_ratings(self):
+        """Annotate ``average_rating`` and ``review_count`` from visible reviews.
+
+        ``average_rating`` is ``None`` for a product with no visible reviews.
+        Mirrors ``ReviewQuerySet.visible()``, in the same query as the products.
+        """
+        visible = models.Q(reviews__is_hidden=False)
+        return self.annotate(
+            average_rating=models.Avg("reviews__rating", filter=visible),
+            review_count=models.Count("reviews", filter=visible),
+        )
+
 
 class Product(models.Model):
     name = models.CharField(max_length=200)

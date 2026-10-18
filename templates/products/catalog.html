@@ -80,6 +80,13 @@
           {% if product.tagline %}
             <p class="text-sm italic opacity-70">{{ product.tagline }}</p>
           {% endif %}
+          <p class="text-sm">
+            {% if product.review_count %}
+              <span class="font-semibold text-warning">★ {{ product.average_rating|floatformat:1 }} ({{ product.review_count }})</span>
+            {% else %}
+              <span class="opacity-60">No reviews yet</span>
+            {% endif %}
+          </p>
           <div class="card-actions items-center justify-between">
             <p class="text-lg font-semibold text-primary">${{ product.price|intcomma }}</p>
             {% include "orders/partials/_add_button.html" with in_cart=cart_quantities|quantity_of:product.pk %}

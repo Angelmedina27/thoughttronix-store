@@ -8,7 +8,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from conftest import make_order
@@ -564,3 +565,85 @@ def test_other_viewers_see_no_delete_link(client, review, other_customer, produc
         delete_url(review)
         not in client.get(product.get_absolute_url()).content.decode()
     )
+
+
+# --- Ratings on catalog and category cards -----------------------------------
+
+
+def test_with_ratings_annotates_visible_reviews_only(
+    review, other_customer, product, unavailable_product
+):
+    Review.objects.create(
+        user=other_customer, product=product, rating=5, comment="x" * 20
+    )
+    hidden_author = get_user_model().objects.create_user(username="spammer")
+    Review.objects.create(
+        user=hidden_author,
+        product=product,
+        rating=1,
+        comment="Spam spam spam spam spam.",
+        is_hidden=True,
+    )
+
+    rated = Product.objects.with_ratings().get(pk=product.pk)
+    unrated = Product.objects.with_ratings().get(pk=unavailable_product.pk)
+
+    assert rated.average_rating == 4.5
+    assert rated.review_count == 2
+    assert unrated.average_rating is None
+    assert unrated.review_count == 0
+
+
+def test_catalog_cards_show_the_rounded_average_or_no_reviews_yet(
+    client, review, other_customer, product, unavailable_product
+):
+    Review.objects.create(
+        user=other_customer, product=product, rating=5, comment="x" * 20
+    )
+    third = get_user_model().objects.create_user(username="third")
+    Review.objects.create(user=third, product=product, rating=5, comment="x" * 20)
+
+    content = client.get(reverse("products:catalog")).content.decode()
+
+    assert "★ 4.7 (3)" in content
+    assert content.count("No reviews yet") == 1
+
+
+def catalog_query_count(client):
+    with CaptureQueriesContext(connection) as queries:
+        client.get(reverse("products:catalog"))
+    return len(queries)
+
+
+def test_the_catalog_query_count_does_not_grow_with_products(
+    client, review, other_customer, product, category, tag
+):
+    product.tags.add(tag)
+    baseline = catalog_query_count(client)
+
+    for n in range(5):
+        extra = Product.objects.create(
+            name=f"Extra {n}", slug=f"extra-{n}", price=Decimal("10"), category=category
+        )
+        extra.tags.add(tag)
+        Review.objects.create(
+            user=other_customer, product=extra, rating=3, comment="x" * 20
+        )
+
+    assert catalog_query_count(client) == baseline
+
+
+def test_category_pages_show_the_same_ratings(client, review, product, category):
+    content = client.get(category.get_absolute_url()).content.decode()
+
+    assert "★ 4.0 (1)" in content
+
+
+def test_hidden_reviews_are_left_off_catalog_cards(client, review, product):
+    review.is_hidden = True
+    review.save()
+
+    content = client.get(reverse("products:catalog")).content.decode()
+
+    assert "★" not in content
+    assert "No reviews yet" in content

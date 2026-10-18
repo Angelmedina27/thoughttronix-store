@@ -28,6 +28,32 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-17 — Product Reviews Phase 7: hide / unhide moderation (TDD)
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 7`
+2. I approve the three. go ahead
+3. I approve go ahead
+4. Yes Im ready for cycle 2
+5. I approve the test go ahead
+6. Go ahead with cycle 3
+7. I approve go ahead
+8. Go ahead with the rest of phase 7
+9. Did the test pass then?
+10. How can I manually verify this phase in the browser?
+11. Update PROMPTS.md with the standard prompt for completing Phase 7
+
+### Summary
+- **Outcome:** Implemented Phase 7 of `plans/product-reviews.md` (user stories 21, 25, 26, 27, and 28) through the `implement` skill, which handed three behaviors to `tdd`.
+  - **Toggle:** `Review.toggle_hidden()` flips `is_hidden` and saves only that field. `ToggleReviewHiddenView` (`StaffRequiredMixin` with a `post`-only `View`) serves `reviews:toggle_hidden` at `/backoffice/reviews/<pk>/toggle-hidden/` and returns `_review_row.html`. Each row gains a Hide / Unhide button (`hx-post`, `hx-target="closest tr"`, `hx-swap="outerHTML"`), and the CSRF token comes from the `hx-headers` already on `<body>`. Staff can change only the hidden flag, never a review's text or rating.
+  - **Author's view:** `ProductDetailView` now takes the viewer's own review from all of the product's reviews, not just `visible()`. A hidden review still appears pinned for its author and never counts toward the list, the average, or the count. `_review_card.html` shows a "Hidden by staff" badge and hides the Delete link on hidden reviews; "Edit your review" stays.
+  - **Delete rule:** a new `Review.can_be_deleted_by(user)` (author and not hidden) drives `ReviewDeleteView.test_func`, so GET and POST on a hidden review return 403. The review stays, and `can_create` keeps the author from posting a new one.
+  - **TDD behaviors:** (1) the toggle hides a review and returns only its row partial with an Unhide button; (2) the author sees their hidden review pinned above a newer one, labeled "Hidden by staff", with Edit and no Delete link; (3) deleting a hidden review is 403 on GET and POST, the review remains, and the author is still ineligible. Each failed on an assertion before its code was written. Cycle 1 needed a stub URL and view first, so the failure came from the missing flip rather than a missing route.
+  - **Other tests:** unhide, the toggle leaving text and rating untouched, POST-only (405 on GET), customers get 403, anonymous users are sent to sign in, 404 for an unknown review, each row offering its toggle, editing a hidden review (it stays hidden), hidden reviews left out of the product-page average and count (including the author's own), hidden reviews left out of card averages alongside a visible one, and unhiding restoring the review, average, count, and card rating.
+  - **Checks:** the full suite passed (374), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** No recommendation was overridden, and the user accepted the three behaviors and each RED test as proposed. The user asked whether the tests had passed (prompt 9) while the full suite was still running in the background. The assistant said it couldn't tell yet and reported the result, 374 passed, once the run finished. The user asked for the browser verification steps again (prompt 10), and the assistant restated them. The user asked for this entry before confirming the browser check that the `implement` skill asks for, so this log does not record a manual verification of the phase.
+- **Sideways:** The assistant's first edit script wrote with Python's default Windows codepage, so two new em dashes were saved as a cp1252 `0x97` byte. The test run that followed failed with `SyntaxError: Non-UTF-8 code`. The assistant re-encoded only those stray bytes to UTF-8, checked `git diff --stat` to confirm no other content had changed, and wrote every later edit with `encoding="utf-8"`. A first draft of the unhide test's "Hide button" assertion was clumsy; it was replaced with a `re.search` before the test ever ran. The full suite outlasted the two-minute foreground timeout and finished in the background (about 4.5 minutes).
+
 ## 2026-10-17 — Product Reviews Phase 6: back-office Reviews tab and product-delete warning (TDD)
 
 ### Prompts

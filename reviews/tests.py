@@ -305,6 +305,23 @@ def test_editing_still_works_after_the_order_is_cancelled(
     assert review.comment == "Refunded, but I stand by every word of this."
 
 
+def test_the_author_can_edit_a_hidden_review_and_it_stays_hidden(
+    client, review, customer, product
+):
+    review.toggle_hidden()
+    client.force_login(customer)
+
+    response = client.post(
+        write_url(product),
+        {"rating": "2", "comment": "Calmer now. It only told my mother once."},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    review.refresh_from_db()
+    assert review.rating == 2
+    assert review.is_hidden
+
+
 def test_an_existing_review_opens_in_the_edit_form_prefilled(
     client, review, customer, product
 ):
@@ -464,6 +481,70 @@ def test_the_viewers_own_review_is_pinned_first(
     assert content.count("Knew what I wanted") == 1
 
 
+def test_the_author_sees_their_hidden_review_pinned_and_labeled(
+    client, review, customer, other_customer, product
+):
+    review.toggle_hidden()
+    Review.objects.create(
+        user=other_customer,
+        product=product,
+        rating=2,
+        comment="Listened a little too well, honestly.",
+        created_at=review.created_at + timedelta(minutes=1),
+    )
+    client.force_login(customer)
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert review.comment in content
+    assert content.index(review.comment) < content.index("Listened a little too well")
+    assert "Hidden by staff" in content
+    assert "Edit your review" in content
+    assert reverse("reviews:delete", kwargs={"pk": review.pk}) not in content
+
+
+def test_hidden_reviews_are_left_out_of_the_product_page_average_and_count(
+    client, review, other_customer, product
+):
+    review.toggle_hidden()
+    Review.objects.create(
+        user=other_customer,
+        product=product,
+        rating=2,
+        comment="Listened a little too well, honestly.",
+    )
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert "★ 2.0" in content
+    assert "based on 1 review" in content
+    assert review.comment not in content
+
+
+def test_the_authors_own_hidden_review_stays_out_of_their_average(
+    client, review, customer, product
+):
+    review.toggle_hidden()
+    client.force_login(customer)
+
+    content = client.get(product.get_absolute_url()).content.decode()
+
+    assert "based on" not in content
+
+
+def test_unhiding_restores_the_review_everywhere(client, review, product):
+    review.toggle_hidden()
+    review.toggle_hidden()
+
+    page = client.get(product.get_absolute_url()).content.decode()
+    catalog = client.get(reverse("products:catalog")).content.decode()
+
+    assert review.comment in page
+    assert "based on 1 review" in page
+    assert "Hidden by staff" not in page
+    assert "★ 4.0 (1)" in catalog
+
+
 # --- Deleting a review -------------------------------------------------------
 
 
@@ -493,6 +574,20 @@ def test_deleting_someone_elses_review_is_forbidden(
 
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert Review.objects.filter(pk=review.pk).exists()
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_deleting_a_hidden_review_is_forbidden(
+    client, review, customer, product, method
+):
+    review.toggle_hidden()
+    client.force_login(customer)
+
+    response = getattr(client, method)(delete_url(review))
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert Review.objects.filter(pk=review.pk).exists()
+    assert not Review.objects.can_create(customer, product)
 
 
 def test_the_owner_sees_a_confirmation_page(client, review, customer, product):
@@ -647,6 +742,19 @@ def test_hidden_reviews_are_left_off_catalog_cards(client, review, product):
 
     assert "★" not in content
     assert "No reviews yet" in content
+
+
+def test_card_averages_and_counts_skip_hidden_reviews(
+    client, review, other_customer, product
+):
+    review.toggle_hidden()
+    Review.objects.create(
+        user=other_customer, product=product, rating=2, comment="x" * 20
+    )
+
+    content = client.get(reverse("products:catalog")).content.decode()
+
+    assert "★ 2.0 (1)" in content
 
 
 # --- Review links on the order detail page -----------------------------------

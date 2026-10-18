@@ -81,10 +81,11 @@ class ProductDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         reviews = self.object.reviews.visible()
         context["rating_summary"] = reviews.rating_summary()
-        # The viewer's own review is pinned above everyone else's.
+        # The viewer's own review is pinned above everyone else's — even a
+        # hidden one, so its author can see why shoppers can't.
         own_review = None
         if self.request.user.is_authenticated:
-            own_review = reviews.filter(user=self.request.user).first()
+            own_review = self.object.reviews.filter(user=self.request.user).first()
             reviews = reviews.exclude(user=self.request.user)
         context["own_review"] = own_review
         context["reviews"] = reviews.select_related("user")

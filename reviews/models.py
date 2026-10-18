@@ -93,3 +93,16 @@ class Review(models.Model):
     def edited(self):
         """Whether the review was saved again more than a minute after posting."""
         return self.updated_at - self.created_at > EDIT_GRACE
+
+    def can_be_deleted_by(self, user):
+        """Whether ``user`` may delete this review: its author, while visible.
+
+        A hidden review stays put, so deleting and re-posting can't
+        sidestep moderation.
+        """
+        return self.user == user and not self.is_hidden
+
+    def toggle_hidden(self):
+        """Hide a visible review, or restore a hidden one — staff moderation."""
+        self.is_hidden = not self.is_hidden
+        self.save(update_fields=["is_hidden"])

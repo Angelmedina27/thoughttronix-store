@@ -6,8 +6,8 @@ point defers to ``Review.objects.can_create`` for eligibility.
 
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.shortcuts import get_object_or_404, redirect
-from django.views.generic import DeleteView, ListView, UpdateView
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.generic import DeleteView, ListView, UpdateView, View
 
 from accounts.mixins import StaffRequiredMixin
 from products.models import Product
@@ -66,14 +66,14 @@ class ReviewWriteView(UserPassesTestMixin, UpdateView):
 class ReviewDeleteView(UserPassesTestMixin, DeleteView):
     """Delete a review after a confirmation page, then return to its product.
 
-    Only the author may delete. Anonymous users are sent to sign in;
-    anyone else gets 403.
+    Only the author may delete, and only while the review is visible.
+    Anonymous users are sent to sign in; anyone else gets 403.
     """
 
     model = Review
 
     def test_func(self):
-        return self.get_object().user == self.request.user
+        return self.get_object().can_be_deleted_by(self.request.user)
 
     def form_valid(self, form):
         product = self.object.product
@@ -112,3 +112,17 @@ class ManageReviewListView(StaffRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["hidden_only"] = self.hidden_only
         return context
+
+
+class ToggleReviewHiddenView(StaffRequiredMixin, View):
+    """HTMX, POST-only: hide or unhide a review, then re-render its row.
+
+    The only change staff can make to a review — never its text or rating.
+    """
+
+    def post(self, request, pk):
+        review = get_object_or_404(
+            Review.objects.select_related("user", "product"), pk=pk
+        )
+        review.toggle_hidden()
+        return render(request, "reviews/partials/_review_row.html", {"review": review})

@@ -18,4 +18,13 @@
       <span class="badge badge-success badge-outline">Visible</span>
     {% endif %}
   </td>
+  <td>
+    <button type="button"
+            class="btn btn-xs {% if review.is_hidden %}btn-outline btn-success{% else %}btn-outline btn-warning{% endif %}"
+            hx-post="{% url 'reviews:toggle_hidden' review.pk %}"
+            hx-target="closest tr"
+            hx-swap="outerHTML">
+      {% if review.is_hidden %}Unhide{% else %}Hide{% endif %}
+    </button>
+  </td>
 </tr>

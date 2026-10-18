@@ -1,10 +1,12 @@
-{# One review in the product page's list; ``own`` marks the viewer's pinned review. #}
+{# One review in the product page's list; ``own`` marks the viewer's pinned review,
+   the only place a hidden review is ever shown. #}
 <li class="card bg-base-100 shadow-md{% if own %} border border-primary{% endif %}">
   <div class="card-body gap-2">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         {% include "reviews/partials/_stars.html" with rating=review.rating %}
         {% if own %}<span class="badge badge-primary badge-sm">Your review</span>{% endif %}
+        {% if review.is_hidden %}<span class="badge badge-warning badge-sm">Hidden by staff</span>{% endif %}
       </div>
       <span class="text-sm opacity-60">
         {{ review.created_at|date:"M j, Y" }}{% if review.edited %} · edited{% endif %}
@@ -16,7 +18,7 @@
         — {{ review.user.username }}
         <span class="badge badge-success badge-outline badge-sm ml-1">Verified buyer</span>
       </p>
-      {% if own %}
+      {% if own and not review.is_hidden %}
         <a href="{% url 'reviews:delete' review.pk %}" class="btn btn-ghost btn-xs text-error">Delete</a>
       {% endif %}
     </div>

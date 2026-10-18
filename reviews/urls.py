@@ -20,4 +20,9 @@ urlpatterns = [
         views.ManageReviewListView.as_view(),
         name="manage_reviews",
     ),
+    path(
+        "backoffice/reviews/<int:pk>/toggle-hidden/",
+        views.ToggleReviewHiddenView.as_view(),
+        name="toggle_hidden",
+    ),
 ]

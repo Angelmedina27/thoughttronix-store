@@ -10,7 +10,8 @@ Demo logins (documented in the README):
 
     admin / admin123        superuser
     employee / employee123  staff, "Junior Thought Curator"
-    customer / customer123  a plain customer, with order history and a live cart
+    customer / customer123  a plain customer, with order history, a live cart,
+                            and one review (MindSync)
     oldtimer / oldtimer123  a grandfathered customer with no email on file
 
 ``admin`` and ``employee`` have a backdated "password last changed"; every
@@ -34,6 +35,7 @@ from django.utils.text import slugify
 from coupons.models import Coupon
 from orders.models import Cart, Order, OrderItem
 from products.models import Category, Product, Tag
+from reviews.models import Review
 
 # Product photos, named by product slug. Products without one keep their
 # category placeholder.
@@ -528,6 +530,63 @@ COUPONS = [
     ("SUMMER25", 25, None, False),
 ]
 
+# Share of background customers' delivered order lines that get reviewed.
+REVIEW_RATE = 0.6
+
+# Star ratings lean happy, like real storefronts: (rating, weight).
+RATING_WEIGHTS = [(5, 40), (4, 30), (3, 15), (2, 10), (1, 5)]
+
+# Hand-written, in-universe comments, by mood. Every one clears the
+# review form's 20-character minimum.
+REVIEW_COMMENTS = {
+    "glowing": [
+        "Setup took five minutes and it already knew my coffee order. "
+        "Honestly a little moving.",
+        "Best purchase I've made this year. My family says I seem calmer, "
+        "and I believe them.",
+        "Works exactly as described. It finishes my sentences now, which "
+        "saves a lot of time.",
+        "I was skeptical, but the onboarding questionnaire was so gentle. "
+        "Five stars, no notes.",
+        "It remembered my mother's birthday before I did. I don't remember "
+        "telling it, but I'm grateful.",
+        "Flawless. I haven't had an unproductive thought since Tuesday.",
+    ],
+    "mixed": [
+        "Does what it says, but the firmware update chime plays at 3 a.m. "
+        "and I can't turn it off.",
+        "Good hardware. The privacy settings page is mostly a picture of a padlock.",
+        "Solid overall. Occasionally it answers questions I only meant to "
+        "think about asking.",
+        "Fine for the price. Battery life is great; the humming is new.",
+    ],
+    "unhappy": [
+        "Stopped working after a month. Support said it was 'still "
+        "listening, just not to me.'",
+        "Returned it twice. It keeps showing up at my door again anyway.",
+        "Not as advertised. My dreams now include product placement.",
+    ],
+}
+
+# Comments on the background reviews staff have hidden.
+HIDDEN_COMMENTS = [
+    "BUY CHEAP NEURAL BOOSTERS AT THINKFASTPILLS DOT NET!!! not affiliated lol",
+    "This company reads your mind and so does my cousin, call him at "
+    "555-0199 for half price.",
+]
+
+# The customer demo login's one review, written after delivery and revised
+# later: (product slug, rating, comment, days after the order, days after
+# that it was edited).
+CUSTOMER_REVIEW = (
+    "mindsync",
+    4,
+    "Installation was painless and the focus boost is real. Docked a star "
+    "for the ads I now see when I close my eyes.",
+    10,
+    40,
+)
+
 
 class Command(BaseCommand):
     help = "Wipe and rebuild the demo world: catalog, tags, and demo accounts."
@@ -540,7 +599,11 @@ class Command(BaseCommand):
         self._create_coupons()
         self._create_users()
         self._create_customer_cart()
-        self._create_orders()
+        # One seeded RNG for orders and reviews keeps every run identical
+        # (the idempotence contract).
+        rng = random.Random(2026)
+        self._create_orders(rng)
+        self._create_reviews(rng)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -550,12 +613,16 @@ class Command(BaseCommand):
                 f"{Coupon.objects.count()} coupons, "
                 f"{get_user_model().objects.count()} users, "
                 f"{Order.objects.count()} orders, "
+                f"{Review.objects.count()} reviews, "
                 f"and a live cart for 'customer'."
             )
         )
 
     def _wipe(self):
-        """Remove everything the seed owns; the rebuild starts from zero."""
+        """Remove everything the seed owns; the rebuild starts from zero.
+
+        Reviews go with their products and users through ``CASCADE``.
+        """
         Order.objects.all().delete()
         Cart.objects.all().delete()
         Coupon.objects.all().delete()
@@ -647,15 +714,12 @@ class Command(BaseCommand):
         for slug, quantity in CUSTOMER_CART:
             cart.items.create(product=Product.objects.get(slug=slug), quantity=quantity)
 
-    def _create_orders(self):
+    def _create_orders(self, rng):
         """Order history: 4 visible orders for 'customer', 48 background.
 
-        A seeded RNG keeps every run identical (the idempotence
-        contract). Statuses follow age — old orders are delivered,
-        recent ones are still moving, and about one in ten was
-        cancelled along the way.
+        Statuses follow age — old orders are delivered, recent ones are
+        still moving, and about one in ten was cancelled along the way.
         """
-        rng = random.Random(2026)
         now = timezone.now()
         User = get_user_model()
 
@@ -738,3 +802,92 @@ class Command(BaseCommand):
                 unit_price=product.price,
                 quantity=quantity,
             )
+
+    def _create_reviews(self, rng):
+        """Reviews from verified buyers: 'customer' on MindSync, plus a
+        share of the background customers' delivered lines, two hidden.
+
+        Every review passes ``Review.objects.can_create`` first, so the
+        seed obeys the storefront's rule — one review per customer per
+        product, delivered orders only.
+        """
+        now = timezone.now()
+        customer = get_user_model().objects.get(username="customer")
+
+        slug, rating, comment, days_after, edited_after = CUSTOMER_REVIEW
+        product = Product.objects.get(slug=slug)
+        if Review.objects.can_create(customer, product):
+            order = Order.objects.filter(
+                user=customer,
+                status=Order.Status.DELIVERED,
+                items__product=product,
+            ).earliest("created_at")
+            created_at = order.created_at + timedelta(days=days_after)
+            self._build_review(
+                user=customer,
+                product=product,
+                rating=rating,
+                comment=comment,
+                created_at=created_at,
+                updated_at=min(created_at + timedelta(days=edited_after), now),
+            )
+
+        lines = (
+            OrderItem.objects.filter(
+                order__status=Order.Status.DELIVERED,
+                order__user__username__in=[
+                    username for username, *_ in BACKGROUND_CUSTOMERS
+                ],
+            )
+            .select_related("order__user", "product")
+            .order_by("order__created_at", "pk")
+        )
+        ratings, weights = zip(*RATING_WEIGHTS, strict=True)
+        background_reviews = []
+        for line in lines:
+            if rng.random() >= REVIEW_RATE:
+                continue
+            if not Review.objects.can_create(line.order.user, line.product):
+                continue
+            rating = rng.choices(ratings, weights)[0]
+            mood = "glowing" if rating >= 4 else "mixed" if rating == 3 else "unhappy"
+            # Written a few days to a few weeks after the order, never in
+            # the future.
+            created_at = min(
+                line.order.created_at
+                + timedelta(days=rng.randint(3, 30), hours=rng.randint(0, 23)),
+                now - timedelta(hours=1),
+            )
+            background_reviews.append(
+                self._build_review(
+                    user=line.order.user,
+                    product=line.product,
+                    rating=rating,
+                    comment=rng.choice(REVIEW_COMMENTS[mood]),
+                    created_at=created_at,
+                )
+            )
+
+        # Spam that slipped through — staff hid it from the storefront.
+        hidden = rng.sample(background_reviews, len(HIDDEN_COMMENTS))
+        for review, comment in zip(hidden, HIDDEN_COMMENTS, strict=True):
+            Review.objects.filter(pk=review.pk).update(
+                rating=1, comment=comment, is_hidden=True
+            )
+
+    def _build_review(
+        self, *, user, product, rating, comment, created_at, updated_at=None
+    ):
+        """One backdated review. ``updated_at`` defaults to ``created_at``,
+        so a seeded review reads as edited only when asked to.
+        """
+        review = Review.objects.create(
+            user=user,
+            product=product,
+            rating=rating,
+            comment=comment,
+            created_at=created_at,
+        )
+        # auto_now stamped "now" on save; write the backdated value directly.
+        Review.objects.filter(pk=review.pk).update(updated_at=updated_at or created_at)
+        return review

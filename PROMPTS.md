@@ -28,6 +28,37 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-10-18 — Product Reviews Phase 9: seed the demo world with reviews
+
+### Prompts
+1. `/implement @prd/product-reviews.md @plans/product-reviews.md implement phase 9`
+2. YEs, go ahead without TDD
+3. How can I manually verify this phase in the browser?
+4. Update PROMPTS.md with the standard prompt for completing Phase 9
+
+### Summary
+- **Outcome:** Implemented Phase 9 of `plans/product-reviews.md` (user stories 32 and 33) in `products/management/commands/seed.py`. A fresh seed now reports 44 reviews across 22 products, 2 of them hidden.
+  - **One RNG:** `handle()` creates the existing `random.Random(2026)` and passes it to `_create_orders(rng)` and then the new `_create_reviews(rng)`. Orders consume it in the same order as before, so the order history is unchanged.
+  - **Demo customer:** `CUSTOMER_REVIEW` gives `customer` a 4★ MindSync review, dated 10 days after the delivered order and edited 40 days after that, so the "edited" marker has a demo. SyncRest and DreamWeaver stay unreviewed.
+  - **Background reviews:** About 60% (`REVIEW_RATE`) of background customers' delivered order lines are reviewed. They are walked in a fixed order (`order__created_at`, `pk`), and every review is gated on `Review.objects.can_create`, which also skips repeat purchases of a product. Ratings come from `RATING_WEIGHTS` (40/30/15/10/5 for 5★ down to 1★). Comments come from `REVIEW_COMMENTS`, hand-written in-universe lines in "glowing," "mixed," and "unhappy" pools chosen by rating. `created_at` falls 3–30 days after the order, capped at an hour before now.
+  - **Hidden reviews:** Two background reviews, picked with the RNG, are rewritten with the `HIDDEN_COMMENTS` spam text, set to 1★, and hidden.
+  - **Backdating:** A `_build_review` helper writes `updated_at` back to `created_at` with a queryset `.update()` (or to an explicit later time for the MindSync review). Without it, `auto_now` would stamp "now" and every backdated review would read as edited.
+  - **Docs and output:** The module and `_wipe` docstrings note the customer's review and the cascade wipe, and the success message prints the review count.
+  - **Checks:** A shell script run after two consecutive seeds found the following:
+    - identical review digests across the two runs;
+    - 0 reviews dated before their delivered order;
+    - only `customer`/MindSync marked edited;
+    - 18 visible reviews in the last 30 days.
+  - **Walkthrough:** A test-client walkthrough confirmed "Edit your review" on MindSync, "Write a review" on SyncRest and DreamWeaver, the right link on each delivered order line, and no hidden comment on the public page.
+  - **Suite and lint:** The full suite passed (377 in 4.5 minutes; no new tests, since tests never invoke `seed`), and `ruff check` and `ruff format` were clean. Nothing was committed.
+- **Deviations:** The `tdd` skill found no candidates, because the phase is seed data and tests never invoke `seed`. The user approved skipping TDD along with the proposed plan, including the assistant's added decision to show the customer's review as edited. The user asked for the browser verification steps again (prompt 3), and the assistant gave a fuller walkthrough with URLs. The user asked for this entry without explicitly confirming the browser check passed.
+- **Sideways:**
+  - **Quoting:** A heredoc-driven Python script for the edits failed on shell quoting, so the edits were made with the Edit tool instead.
+  - **Checks:** The first idempotence check compared Python `hash()` values, which are randomized per process, so the two runs looked different. It was switched to a SHA-256 digest of the rows. The first date check filtered on a literal `"delivered"` status and reported all 44 reviews as bad, until it was switched to `Order.Status.DELIVERED`. The check script also crashed printing `★` to the cp1252 console.
+  - **Lint:** `ruff check` flagged two `zip()` calls missing `strict=` (B905); both now pass `strict=True`.
+  - **Hung test run:** The first full test run sat nearly idle for about 18 minutes behind a `| tail -3` that hid its progress. It was killed and rerun with verbose output to a log, and that run finished normally in 4.5 minutes. The cause wasn't found.
+  - **Catalog page 1:** The test-client walkthrough found no "No reviews yet" cards there, because the first 12 products all have reviews; the unreviewed ones are on later pages.
+
 ## 2026-10-17 — Product Reviews Phase 8: dashboard review tiles (TDD)
 
 ### Prompts
